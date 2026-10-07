@@ -1,0 +1,12 @@
+{
+  "name": "Vidosser",
+  "author": "sweetyshots123",
+  "version": "1.2.0",
+  "description": "Collection of video viewing tools for WanGP. Currently: frame stepping with the mouse wheel (one notch = one frame, Shift = 10; by default only in fullscreen) and the keyboard (A/S = previous/next frame, Q/W = jump back/forward), and saving the exact displayed frame at full resolution (D or middle click, PNG/JPG, save-as dialog or direct to a folder). Works on the output gallery and every video player. Settings in the 'Vidosser' tab.",
+  "type": [
+    "extension"
+  ],
+  "url": "https://github.com/sweetyshots123/wan2gp-vidosser",
+  "date": "2026-10-07",
+  "wan2gp_version": ""
+}
