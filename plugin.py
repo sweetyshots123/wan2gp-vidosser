@@ -2,8 +2,12 @@
 
 Current tools (modules):
   * frame_step: step video frames with the mouse wheel (one notch = one frame,
-    Shift + wheel = 10 frames; by default only while fullscreen) or the keyboard (S / A = next / previous frame,
+    Shift + wheel = 10 frames, Ctrl + wheel = one short jump per notch; by default
+    only while fullscreen) or the keyboard (S / A = next / previous frame,
     W / Q = jump forward / back), also in fullscreen.
+  * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
+    loop (frame accurate), U = clear the segment.
+  * container_fs: video fullscreen on its container so overlays / messages stay visible.
   * save_frame: D (or a middle click / wheel click on the video) = save the displayed frame as PNG/JPG, extracted server-side from
     the source video with WanGP's own decoder (lossless, exact frame), either with
     a "save as" dialog or straight into a folder.
@@ -30,13 +34,16 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.2.0"
+PLUGIN_VERSION = "1.3.0"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
 KEY_ACTIONS = [("next_frame", "Fotograma siguiente"), ("prev_frame", "Fotograma anterior"),
                ("jump_forward", "Salto adelante"), ("jump_back", "Salto atrás"),
-               ("save_frame_as", "Guardar fotograma")]
+               ("save_frame_as", "Guardar fotograma"),
+               ("toggle_loop", "Bucle on/off (este vídeo)"), ("mark_in", "Inicio del segmento A-B"),
+               ("mark_out", "Final del segmento A-B"), ("clear_segment", "Borrar segmento A-B")]
+LOOP_ACTIONS = ("toggle_loop", "mark_in", "mark_out", "clear_segment")
 
 DEFAULT_SETTINGS = {
     "general": {
@@ -44,6 +51,8 @@ DEFAULT_SETTINGS = {
         "min_video_size": 100,      # ignore tiny videos (thumbnails) smaller than this, in px
         "show_overlay": True,       # small info badge on the video (not possible in native <video> fullscreen)
         "overlay_ms": 1200,         # how long the badge stays visible (ms)
+        "container_fullscreen": True,  # video fullscreen (double-click / player button) on its container
+                                       # instead of native <video> fullscreen, so overlays/toasts show
     },
     "keys": {                       # one key per action (case-insensitive, ignored while typing)
         "enabled": True,
@@ -52,17 +61,27 @@ DEFAULT_SETTINGS = {
         "jump_forward": "w",
         "jump_back": "q",
         "save_frame_as": "d",
+        "toggle_loop": "l",         # loop on/off for the current video
+        "mark_in": "i",             # A-B segment loop: start = current frame
+        "mark_out": "o",            # A-B segment loop: end = current frame
+        "clear_segment": "u",       # remove the A-B segment
     },
     "frame_step": {
         "enabled": True,
         "wheel_enabled": True,      # one wheel notch = one frame
         "wheel_fullscreen_only": True,  # wheel steps only while a video (or its container) is fullscreen;
                                         # outside fullscreen the wheel scrolls the page as usual
+        "wheel_jump_modifier": "ctrl",  # modifier + wheel = one short jump (jump_*) per notch:
+                                        # "ctrl" | "alt" | "shift" | "meta" | "none"
         "shift_frames": 10,         # frames per notch while Shift is held
         "invert_direction": False,  # False: wheel down = next frame, wheel up = previous frame
         "jump_mode": "seconds",     # "seconds": jump_seconds converted with the video fps, "frames": jump_frames
         "jump_seconds": 0.5,
         "jump_frames": 8,
+    },
+    "loop": {
+        "enabled": True,
+        "loop_all": False,          # every video plays in loop
     },
     "save_frame": {
         "enabled": True,
@@ -71,11 +90,19 @@ DEFAULT_SETTINGS = {
         "mode": "ask",              # "ask": save-as dialog | "direct": straight into `folder`
         "folder": "",               # "" = <WanGP outputs folder>/frames
         "middle_click_save": True,  # middle mouse button (wheel click) on a video = save frame
+        "toast": True,              # prominent "Fotograma guardado" message
+        "toast_ms": 2500,           # how long it stays visible (ms)
+        "flash": True,              # white flash over the video when saved
+        "sound": True,              # camera-shutter sound on save (error beep on failure); the only
+                                    # feedback possible in native <video> fullscreen
+        "sound_volume": 60,         # 1..100
     },
 }
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("save_frame", "format"): ("png", "jpg"),
-            ("save_frame", "mode"): ("ask", "direct")}
+            ("save_frame", "mode"): ("ask", "direct"),
+            ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none")}
+JUMP_MODIFIER_CHOICES = [("Ctrl", "ctrl"), ("Alt", "alt"), ("Shift", "shift"), ("Meta (Cmd / Win)", "meta"), ("Ninguno", "none")]
 _ALLOW_EMPTY = {("save_frame", "folder")}
 
 
@@ -116,6 +143,7 @@ def load_settings(path=None):
     if not isinstance(user_settings, dict):
         return settings
     _migrate_legacy(user_settings)
+    user_keys = user_settings.get("keys") if isinstance(user_settings.get("keys"), dict) else {}
     for section, defaults in DEFAULT_SETTINGS.items():
         user_section = user_settings.get(section)
         if not isinstance(user_section, dict):
@@ -124,7 +152,30 @@ def load_settings(path=None):
             if key in user_section:
                 settings[section][key] = _coerce(section, key, default, user_section[key])
     settings["save_frame"]["jpg_quality"] = max(1, min(100, settings["save_frame"]["jpg_quality"]))
+    settings["save_frame"]["sound_volume"] = max(1, min(100, settings["save_frame"]["sound_volume"]))
+    settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
+    _resolve_new_key_conflicts(settings["keys"], {a for a, _l in KEY_ACTIONS if a in user_keys})
     return settings
+
+
+_FALLBACK_KEYS = "lkjhgfpyxbnmzcvrt1234567890"
+
+
+def _resolve_new_key_conflicts(keys, user_set):
+    """A key that only comes from the built-in defaults (e.g. an action added in a newer
+    version) must not steal a key the user already assigned to another action: the
+    user's key wins and the new action moves to the first free fallback key."""
+    taken = {keys[a] for a in user_set}
+    for action, _label in KEY_ACTIONS:
+        if action in user_set:
+            continue
+        if keys[action] in taken:
+            free = next((k for k in _FALLBACK_KEYS if k not in taken and k not in
+                         {keys[a] for a, _l in KEY_ACTIONS if a not in user_set and a != action}), None)
+            if free:
+                print(f"[Vidosser] key «{keys[action]}» is already used, «{action}» moved to «{free}»")
+                keys[action] = free
+        taken.add(keys[action])
 
 
 def _migrate_legacy(user_settings):
@@ -238,10 +289,11 @@ class VidosserPlugin(WAN2GPPlugin):
             gr.Markdown("### Teclas\nHaz clic en un cuadro y pulsa la tecla que quieras (Retroceso = borrar). "
                         "Las teclas no hacen nada mientras escribes en un cuadro de texto, ni con Ctrl/Alt/Cmd.")
             key_boxes = []
-            with gr.Row():
-                for action, label in KEY_ACTIONS:
-                    key_boxes.append(gr.Textbox(label=label, value=current("keys", action), max_lines=1, min_width=120,
-                                                elem_id=f"vidosser_key_{action}", elem_classes="vidosser-key-input"))
+            for row in ([a for a in KEY_ACTIONS if a[0] not in LOOP_ACTIONS], [a for a in KEY_ACTIONS if a[0] in LOOP_ACTIONS]):
+                with gr.Row():
+                    for action, label in row:
+                        key_boxes.append(gr.Textbox(label=label, value=current("keys", action), max_lines=1, min_width=120,
+                                                    elem_id=f"vidosser_key_{action}", elem_classes="vidosser-key-input"))
             keys_enabled = gr.Checkbox(label="Atajos de teclado activados", value=current("keys", "enabled"), elem_id="vidosser_keys_enabled")
         with gr.Group():
             gr.Markdown("### Paso de fotogramas")
@@ -251,10 +303,20 @@ class VidosserPlugin(WAN2GPPlugin):
                                             value=current("frame_step", "wheel_fullscreen_only"), elem_id="vidosser_wheel_fullscreen_only")
                 invert = gr.Checkbox(label="Invertir sentido de la rueda", value=current("frame_step", "invert_direction"), elem_id="vidosser_invert")
                 shift_frames = gr.Number(label="Fotogramas con Shift + rueda", value=current("frame_step", "shift_frames"), precision=0, minimum=1, elem_id="vidosser_shift_frames")
+        with gr.Group():
+            gr.Markdown("### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido.")
             with gr.Row():
-                jump_mode = gr.Radio(label="Salto (W / Q)", choices=[("En segundos", "seconds"), ("En fotogramas", "frames")], value=current("frame_step", "jump_mode"), elem_id="vidosser_jump_mode")
-                jump_seconds = gr.Number(label="Segundos por salto", value=current("frame_step", "jump_seconds"), minimum=0.01, elem_id="vidosser_jump_seconds")
-                jump_frames = gr.Number(label="Fotogramas por salto", value=current("frame_step", "jump_frames"), precision=0, minimum=1, elem_id="vidosser_jump_frames")
+                jump_mode = gr.Radio(label="Salto corto: medida", choices=[("En segundos", "seconds"), ("En fotogramas", "frames")], value=current("frame_step", "jump_mode"), elem_id="vidosser_jump_mode")
+                jump_seconds = gr.Number(label="Salto corto: segundos", value=current("frame_step", "jump_seconds"), minimum=0.01, elem_id="vidosser_jump_seconds")
+                jump_frames = gr.Number(label="Salto corto: fotogramas", value=current("frame_step", "jump_frames"), precision=0, minimum=1, elem_id="vidosser_jump_frames")
+                jump_modifier = gr.Dropdown(label="Modificador + rueda = salto corto", choices=JUMP_MODIFIER_CHOICES,
+                                            value=current("frame_step", "wheel_jump_modifier"), elem_id="vidosser_wheel_jump_modifier",
+                                            info="Una muesca = un salto corto. Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift.")
+        with gr.Group():
+            gr.Markdown("### Bucle\n**L** activa o desactiva el bucle del vídeo actual. **I** / **O** marcan el inicio / final de un "
+                        "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
+                        "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. Las teclas se cambian arriba, en «Teclas».")
+            loop_all = gr.Checkbox(label="Repetir todos los vídeos en bucle", value=current("loop", "loop_all"), elem_id="vidosser_loop_all")
         with gr.Group():
             gr.Markdown("### Guardar fotograma")
             with gr.Row():
@@ -268,10 +330,24 @@ class VidosserPlugin(WAN2GPPlugin):
             folder_status = gr.Markdown("", elem_id="vidosser_folder_status")
             middle_click = gr.Checkbox(label="Clic central (clic de la rueda) sobre el vídeo = guardar fotograma", value=current("save_frame", "middle_click_save"),
                                        elem_id="vidosser_middle_click_save")
+            gr.Markdown("#### Aviso al guardar")
+            with gr.Row():
+                toast = gr.Checkbox(label="Mensaje «Fotograma guardado»", value=current("save_frame", "toast"), elem_id="vidosser_toast")
+                toast_s = gr.Number(label="Duración del mensaje (segundos)", value=lambda: load_settings()["save_frame"]["toast_ms"] / 1000,
+                                    minimum=0.5, maximum=30, step=0.5, elem_id="vidosser_toast_s")
+                flash = gr.Checkbox(label="Destello blanco sobre el vídeo", value=current("save_frame", "flash"), elem_id="vidosser_flash")
+            with gr.Row():
+                sound = gr.Checkbox(label="Sonido de cámara al guardar (pitido grave si falla)", value=current("save_frame", "sound"), elem_id="vidosser_sound",
+                                    info="Es el único aviso posible en la pantalla completa nativa del vídeo.")
+                sound_volume = gr.Slider(label="Volumen", minimum=1, maximum=100, step=1, value=current("save_frame", "sound_volume"), elem_id="vidosser_sound_volume")
         with gr.Group():
-            gr.Markdown("### Indicador")
+            gr.Markdown("### Indicador y pantalla completa")
             with gr.Row():
                 show_overlay = gr.Checkbox(label="Mostrar indicador sobre el vídeo", value=current("general", "show_overlay"), elem_id="vidosser_show_overlay")
+                container_fs = gr.Checkbox(label="Pantalla completa del vídeo con indicadores y mensajes", value=current("general", "container_fullscreen"),
+                                           elem_id="vidosser_container_fullscreen",
+                                           info="Doble clic en el vídeo o el botón de pantalla completa del reproductor de WanGP usan una pantalla completa "
+                                                "en la que se ven el indicador y los mensajes. El botón de pantalla completa de la barra nativa del navegador sigue siendo nativo.")
                 default_fps = gr.Number(label="FPS si no se pueden detectar", value=current("general", "default_fps"), minimum=1, elem_id="vidosser_default_fps")
         save_btn = gr.Button("Guardar ajustes", variant="primary", elem_id="vidosser_save_settings")
         status = gr.Markdown("", elem_id="vidosser_status")
@@ -283,7 +359,8 @@ class VidosserPlugin(WAN2GPPlugin):
             bridge_btn = gr.Button("bridge", elem_id="vidosser_bridge_btn")
 
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
-                              sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only]
+                              sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
+                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all]
         save_btn.click(fn=self._save_from_ui, inputs=inputs, outputs=[status, settings_json], show_progress="hidden").then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
         check_btn.click(fn=self._check_folder_ui, inputs=[folder], outputs=[folder_status], show_progress="hidden")
@@ -294,12 +371,22 @@ class VidosserPlugin(WAN2GPPlugin):
         ok, path, message = self.check_folder(folder, create=True)
         return f"{'✅' if ok else '❌'} `{path}`: {message}"
 
-    def _save_from_ui(self, k_next, k_prev, k_jf, k_jb, k_save, keys_enabled, wheel_enabled, invert, shift_frames,
-                      jump_mode, jump_seconds, jump_frames, sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps,
-                      middle_click=True, wheel_fs_only=True):
+    _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
+                  "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
+                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all")
+
+    def _save_from_ui(self, *values):
+        """Inputs: one key box per KEY_ACTIONS entry, then the fields of _UI_FIELDS (same order as `inputs`)."""
+        n = len(KEY_ACTIONS)
+        key_values = dict(zip((a for a, _ in KEY_ACTIONS), values[:n]))
+        return self._apply_ui_values(key_values, **dict(zip(self._UI_FIELDS, values[n:])))
+
+    def _apply_ui_values(self, key_values, keys_enabled=True, wheel_enabled=True, invert=False, shift_frames=10,
+                         jump_mode="seconds", jump_seconds=0.5, jump_frames=8, sf_format="png", jpg_quality=95, sf_mode="ask",
+                         folder="", show_overlay=True, default_fps=16, middle_click=True, wheel_fs_only=True, jump_modifier="ctrl",
+                         toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=False):
         settings = load_settings()
-        keys, errors = validate_keys({"next_frame": k_next, "prev_frame": k_prev, "jump_forward": k_jf,
-                                      "jump_back": k_jb, "save_frame_as": k_save})
+        keys, errors = validate_keys(key_values)
         def number(value, label, minimum, maximum, integer):
             try:
                 v = float(value)
@@ -310,30 +397,45 @@ class VidosserPlugin(WAN2GPPlugin):
                 return None
             return int(round(v)) if integer else round(v, 3)
         shift_frames = number(shift_frames, "Fotogramas con Shift + rueda", 1, 1000, True)
-        jump_seconds = number(jump_seconds, "Segundos por salto", 0.01, 600, False)
-        jump_frames = number(jump_frames, "Fotogramas por salto", 1, 100000, True)
+        jump_seconds = number(jump_seconds, "Salto corto: segundos", 0.01, 600, False)
+        jump_frames = number(jump_frames, "Salto corto: fotogramas", 1, 100000, True)
         jpg_quality = number(jpg_quality, "Calidad JPG", 1, 100, True)
         default_fps = number(default_fps, "FPS si no se pueden detectar", 1, 1000, False)
+        toast_s = number(toast_s, "Duración del mensaje (segundos)", 0.5, 30, False)
+        sound_volume = number(sound_volume, "Volumen", 1, 100, True)
         folder = str(folder or "").strip().strip('"')
         if sf_mode == "direct" or folder:
             ok, path, message = self.check_folder(folder, create=sf_mode == "direct")
             if not ok:
                 errors.append(f"Carpeta `{path}`: {message}.")
+        jump_modifier = str(jump_modifier or "none").lower()
+        if jump_modifier not in _CHOICES[("frame_step", "wheel_jump_modifier")]:
+            errors.append("«Modificador + rueda = salto corto»: valor no válido.")
         if errors:
             return "❌ No se ha guardado:\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
+        notes = []
+        if jump_modifier == "shift":
+            notes.append(f"Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y "
+                         f"los «Fotogramas con Shift + rueda» ({shift_frames}) no se usan.")
+        settings["frame_step"].update(wheel_jump_modifier=jump_modifier)
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)
         settings["save_frame"].update(format=sf_format if sf_format in ("png", "jpg") else "png", jpg_quality=jpg_quality,
                                       mode=sf_mode if sf_mode in ("ask", "direct") else "ask", folder=folder,
-                                      middle_click_save=bool(middle_click))
-        settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps)
+                                      middle_click_save=bool(middle_click), toast=bool(toast), toast_ms=int(round(toast_s * 1000)),
+                                      flash=bool(flash), sound=bool(sound), sound_volume=sound_volume)
+        settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs))
+        settings["loop"].update(loop_all=bool(loop_all))
         try:
             save_settings(settings)
         except Exception as e:
             return f"❌ No se ha podido escribir settings.json: {e}", gr.update()
-        return "✅ Ajustes guardados y aplicados (en otras pestañas del navegador ya abiertas, recarga la página).", json.dumps(settings)
+        message = "✅ Ajustes guardados y aplicados (en otras pestañas del navegador ya abiertas, recarga la página)."
+        if notes:
+            message += "\n\n⚠️ " + "\n\n⚠️ ".join(notes)
+        return message, json.dumps(settings)
 
     # ------------------------------------------------------------ JS bridge
     def _bridge(self, raw):

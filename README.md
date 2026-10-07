@@ -1,8 +1,8 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.2.0
+*[Español](README.es.md)* · MIT License · v1.3.0
 
-**Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping with the mouse wheel or keyboard, and saves the exact frame on screen as PNG/JPG at full resolution. More tools will be added over time.
+**Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel or keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), and loops whole videos or a frame-accurate A-B segment. More tools will be added over time.
 
 It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survives WanGP updates.
 
@@ -13,6 +13,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 **Frame stepping**
 - **1 mouse-wheel notch = exactly 1 frame**: no acceleration, no skipped frames, even when you spin the wheel fast. Wheel down = next frame, wheel up = previous. **Shift + wheel = 10 frames** per notch (configurable).
 - By default the wheel steps frames **only while a video is fullscreen** (the video player's own fullscreen or the gallery's fullscreen button). Outside fullscreen the wheel scrolls the page as usual, even over a video. This can be turned off.
+- **Ctrl + wheel = short jump**: each notch jumps exactly one *short jump* (the same size as Q / W, 0.5 s by default). The modifier is configurable (Ctrl, Alt, Shift, Meta/Cmd or none). Vidosser only blocks the browser's Ctrl + wheel zoom while it is actually stepping a video; everywhere else (and outside fullscreen with the default setting) Ctrl + wheel zooms the page as usual. Trackpad pinch gestures, which browsers report as Ctrl + wheel, are accumulated so that one pinch "step" is one jump instead of dozens.
 - Keyboard: **A / S** = previous / next frame (holding the key keeps stepping one frame at a time). **Q / W** = jump back / forward by 0.5 s (rounded to whole frames at the video's frame rate) or by a fixed number of frames.
 - The real frame rate is read from the file (MP4/MOV/MKV/WebM), so stepping is exact for Wan (16 fps), LTX (24/25 fps), interpolated videos (32 fps) and more.
 - A playing video pauses on the first step. A small overlay shows `Frame N / last · fps` and fades out.
@@ -24,7 +25,17 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - **PNG** (lossless) or **JPG** (quality 1–100, default 95).
 - File name: `<video name>_frame<NNNNN>.png`, e.g. `my_video_frame00023.png`.
 - **Ask mode** (default): opens the browser's *Save as* dialog, starting in the last folder used. Cancel saves nothing.
-- **Direct mode**: no dialog; saves into a folder on the machine running WanGP (default `<WanGP outputs>/frames`, created if missing). It **never overwrites**: existing names get `_1`, `_2`… The overlay shows the full saved path.
+- **Direct mode**: no dialog; saves into a folder on the machine running WanGP (default `<WanGP outputs>/frames`, created if missing). It **never overwrites**: existing names get `_1`, `_2`… The message shows the full saved path.
+- **Clear feedback** on every save: a large message at the bottom of the screen, *Fotograma guardado (frame N): name* (green, 2.5 s, fades out; full path in direct mode; in ask mode it appears once the *Save as* dialog is closed), a short white flash over the video and a camera-shutter sound. Errors show a red message and a low double beep; a cancelled dialog shows a grey *No guardado (cancelado)* message. While a container is fullscreen the message is drawn inside it, so it is visible there too. Each of these can be switched off; the sound volume is adjustable.
+
+**Fullscreen with overlays** (`container_fullscreen`, on by default)
+- Browsers can't draw anything over a natively fullscreen `<video>`. So when you **double-click a video** or use the **fullscreen button of WanGP's video player**, Vidosser makes the video's player box fullscreen instead. The video looks the same, but the frame overlay, save messages and loop bar are visible. Leaving fullscreen (Esc, double-click again) works as usual.
+- The fullscreen button **inside the browser's own control bar** of a video can't be intercepted by a web page, so it stays native; there the save is confirmed by the sound.
+
+**Loop**
+- **L** turns looping on/off for the current video. *Repetir todos los vídeos en bucle* (*loop all videos*, off by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
+- **A-B segment**: **I** marks the start (in) and **O** the end (out) at the current frame; playback then repeats exactly frames in…out (frame-accurate, using `requestVideoFrameCallback`), also when out is the last frame. Marking out before in swaps them; moving one end past the other end of an existing segment starts a new segment. **U** clears the segment. Pressing play outside the segment starts at in. Frame stepping is never restricted to the segment.
+- Segments are per video (by file) and kept while the page is open. An orange bar over the bottom edge of the video shows the segment's position in the clip. Messages confirm each action: *Inicio de bucle: frame N*, *Final de bucle: frame N*, *Bucle borrado*.
 
 **Settings tab**: every option is editable in a **Vidosser** tab and applies instantly, with no restart.
 
@@ -34,13 +45,18 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 |---|---|---|
 | Next / previous frame | Wheel down / up | 1 notch = 1 frame; only in fullscreen by default |
 | Jump ×10 frames | Shift + wheel | configurable (`shift_frames`) |
+| Short jump (= Q / W) | Ctrl + wheel | modifier configurable (`wheel_jump_modifier`) |
 | Previous frame | `A` | auto-repeat steps one frame per repeat |
 | Next frame | `S` | |
 | Jump back | `Q` | 0.5 s by default, or N frames |
 | Jump forward | `W` | |
 | Save frame | `D` or middle click on the video | PNG/JPG, ask or direct mode |
+| Loop on/off (this video) | `L` | |
+| Segment start / end | `I` / `O` | A-B loop at the current frame |
+| Clear segment | `U` | |
+| Fullscreen with overlays | double-click the video | or WanGP's player fullscreen button |
 
-Keys are case-insensitive and remappable. They do nothing while you type in a text field (prompt etc.) or while Ctrl/Alt/Cmd is held, so WanGP's own Alt+… shortcuts keep working. The target video is, in order: the fullscreen video, then the video under the mouse, then the last video you used if it's still visible.
+Keys are case-insensitive and remappable; the same key can't be used for two actions. If your existing settings already use one of the new 1.3.0 keys (L, I, O, U) for another action, your key wins and the new action gets a free key (shown in the Vidosser tab). They do nothing while you type in a text field (prompt etc.) or while Ctrl/Alt/Cmd is held, so WanGP's own Alt+… shortcuts keep working. The target video is, in order: the fullscreen video, then the video under the mouse, then the last video you used if it's still visible.
 
 Middle clicks on links, buttons, gallery thumbnails and the rest of the page behave as usual. On a video, the middle click doesn't start Windows autoscroll or Linux paste, saves once per click, and a slight wheel roll while pressing doesn't change the frame.
 
@@ -53,31 +69,45 @@ Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes*
 | **Teclas** (Keys) | *Fotograma siguiente / anterior* (next / previous frame) | `S` / `A` | click the box and press the key you want (Backspace clears) |
 | | *Salto adelante / atrás* (jump forward / back) | `W` / `Q` | |
 | | *Guardar fotograma* (save frame) | `D` | |
+| | *Bucle on/off (este vídeo)* (loop on/off) | `L` | |
+| | *Inicio / Final del segmento A-B* (segment in / out) | `I` / `O` | |
+| | *Borrar segmento A-B* (clear segment) | `U` | |
 | | *Atajos de teclado activados* (keyboard shortcuts on) | on | |
 | **Paso de fotogramas** (Frame stepping) | *Rueda del ratón: 1 muesca = 1 fotograma* (wheel stepping) | on | |
 | | *Rueda solo a pantalla completa* (wheel only in fullscreen) | on | off = wheel steps over any video, also outside fullscreen |
 | | *Invertir sentido de la rueda* (invert wheel) | off | on = wheel up goes forward |
 | | *Fotogramas con Shift + rueda* (Shift + wheel frames) | 10 | |
-| | *Salto (W / Q)* (jump mode) | seconds | *En segundos* (seconds) or *En fotogramas* (frames) |
-| | *Segundos por salto* (seconds per jump) | 0.5 | rounded to whole frames |
-| | *Fotogramas por salto* (frames per jump) | 8 | |
+| **Salto corto** (Short jump: W / Q and modifier + wheel) | *Salto corto: medida* (unit) | seconds | *En segundos* (seconds) or *En fotogramas* (frames) |
+| | *Salto corto: segundos* (seconds) | 0.5 | rounded to whole frames |
+| | *Salto corto: fotogramas* (frames) | 8 | |
+| | *Modificador + rueda = salto corto* (modifier) | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *Ninguno* (none = off). With Shift, Shift + wheel does the short jump instead of the ×10 multiplier (the tab shows a note) |
+| **Bucle** (Loop) | *Repetir todos los vídeos en bucle* (loop all videos) | off | applied live, also to videos added later |
 | **Guardar fotograma** (Save frame) | *Formato* (format) | PNG | PNG or JPG |
 | | *Calidad JPG* (JPG quality) | 95 | 1–100 |
 | | *Modo* (mode) | ask | *Preguntar dónde guardar* (ask) or *Guardar directamente en la carpeta* (direct) |
 | | *Carpeta* (folder, direct mode) | empty = `<WanGP outputs>/frames` | on the machine running WanGP; **Comprobar carpeta** (*Check folder*) tests that it exists or can be created and is writable |
 | | *Clic central … = guardar fotograma* (middle click saves) | on | |
-| **Indicador** (Overlay) | *Mostrar indicador sobre el vídeo* (show overlay) | on | |
+| | *Mensaje «Fotograma guardado»* (save message) | on | |
+| | *Duración del mensaje (segundos)* (message duration) | 2.5 | 0.5–30 |
+| | *Destello blanco sobre el vídeo* (white flash) | on | |
+| | *Sonido de cámara al guardar* (shutter sound) | on | low double beep on errors |
+| | *Volumen* (volume) | 60 | 1–100 |
+| **Indicador y pantalla completa** (Overlay & fullscreen) | *Mostrar indicador sobre el vídeo* (show overlay) | on | |
+| | *Pantalla completa del vídeo con indicadores y mensajes* (fullscreen with overlays) | on | see *Fullscreen with overlays* above |
 | | *FPS si no se pueden detectar* (fallback fps) | 16 | used only if the frame rate can't be read |
 
 <details><summary><code>settings.json</code> structure (advanced)</summary>
 
 ```json
 {
-  "general":    { "default_fps": 16, "min_video_size": 100, "show_overlay": true, "overlay_ms": 1200 },
-  "keys":       { "enabled": true, "next_frame": "s", "prev_frame": "a", "jump_forward": "w", "jump_back": "q", "save_frame_as": "d" },
-  "frame_step": { "enabled": true, "wheel_enabled": true, "wheel_fullscreen_only": true, "shift_frames": 10,
-                  "invert_direction": false, "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
-  "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true }
+  "general":    { "default_fps": 16, "min_video_size": 100, "show_overlay": true, "overlay_ms": 1200, "container_fullscreen": true },
+  "keys":       { "enabled": true, "next_frame": "s", "prev_frame": "a", "jump_forward": "w", "jump_back": "q", "save_frame_as": "d",
+                  "toggle_loop": "l", "mark_in": "i", "mark_out": "o", "clear_segment": "u" },
+  "frame_step": { "enabled": true, "wheel_enabled": true, "wheel_fullscreen_only": true, "wheel_jump_modifier": "ctrl",
+                  "shift_frames": 10, "invert_direction": false, "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
+  "loop":       { "enabled": true, "loop_all": false },
+  "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true,
+                  "toast": true, "toast_ms": 2500, "flash": true, "sound": true, "sound_volume": 60 }
 }
 ```
 Missing keys fall back to these defaults. If you edit the file by hand, reload the page (or restart WanGP).
@@ -98,7 +128,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.2.0.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.3.0.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -123,7 +153,10 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 
 ## Limitations
 
-- In a video player's **native fullscreen** (the fullscreen button in the video's control bar), the wheel, keys and middle click work, but browsers don't allow drawing over a natively fullscreen `<video>`, so the overlay isn't visible there. The gallery's own fullscreen button (top right of the gallery) does show it.
+- In a video's **native fullscreen** (the fullscreen button in the browser's control bar of the video), the wheel, keys and middle click work, but browsers don't allow drawing over a natively fullscreen `<video>`: no overlay, messages, flash or loop bar there; saves are confirmed by the sound. Double-click the video instead (with *fullscreen with overlays* on), or use the gallery's own fullscreen button (top right of the gallery).
+- A-B looping relies on seeking back just before frame out+1 would be shown. It is frame-accurate in Chrome/Edge (tested at 16 and 24 fps); on a heavily loaded machine or in browsers without `requestVideoFrameCallback` an occasional extra frame can flash before the wrap.
+- Loop segments are kept only while the page is open (not saved to disk).
+- Ctrl + wheel and trackpad pinch: if you choose *Ninguno* (none) as the modifier, Ctrl + wheel zooms the browser as usual.
 - The middle click saves when you release the button. In ask mode, if the button is held for more than about 5 seconds, the browser no longer allows the *Save as* dialog and the frame is downloaded instead.
 - Direct mode saves on the machine running WanGP. If you use WanGP from another computer over the network, the file lands on the server.
 - JPG is lossy; use PNG for a bit-exact frame.
@@ -134,14 +167,17 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 ## Troubleshooting
 
 - **Middle click does nothing:** many mouse utilities (Logitech Options/G HUB, Razer Synapse, etc.) can remap the wheel click to another function, in which case the browser never receives a middle click. Set it back to "Middle click" for the browser, and check that *Clic central … = guardar fotograma* is enabled in the Vidosser tab.
-- **No overlay in fullscreen:** you are in native video fullscreen (see Limitations). Use the gallery's fullscreen button, or watch the frame number after leaving fullscreen.
+- **No overlay or messages in fullscreen:** you are in native video fullscreen (see Limitations). Double-click the video instead, or use the gallery's fullscreen button. Check that *Pantalla completa del vídeo con indicadores y mensajes* is on.
+- **Ctrl + wheel zooms the page:** that's expected outside fullscreen when *Rueda solo a pantalla completa* is on, or when the pointer isn't over a video with it off.
+- **No sound on save:** check *Sonido de cámara al guardar* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Rueda solo a pantalla completa* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.2.0 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.3.0 loaded`.
 - **"Error al guardar: vídeo fuera de las carpetas de WanGP":** the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.3.0**: Ctrl + wheel short jump (configurable modifier, trackpad pinch); save feedback (message, flash, shutter sound); fullscreen with overlays on double-click; loop module (loop all, L toggle, frame-accurate A-B segment with I / O / U).
 - **1.2.0**: middle-click (wheel click) save; wheel frame-stepping only in fullscreen by default; settings migration (missing keys use defaults); no `settings.json` shipped.
 - **1.1.0**: renamed to *Vidosser* (collection of video tools); keyboard frame stepping and jumps; save exact frame (PNG/JPG, ask/direct); Vidosser settings tab with live apply.
 - **1.0.0**: mouse-wheel frame stepping (one notch = one frame, Shift = 10), also in fullscreen.

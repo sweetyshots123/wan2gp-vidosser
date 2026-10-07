@@ -2,6 +2,18 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-07
+### Added
+- **Short jump with the wheel**: holding a modifier while turning the wheel makes each notch one short jump (the same size as `W`/`Q`). Setting `frame_step.wheel_jump_modifier`: `ctrl` (default), `alt`, `shift`, `meta` or `none` (dropdown in the tab). With `shift`, the jump takes precedence over `shift_frames` and the tab shows a note. The browser zoom (Ctrl + wheel) is blocked only while Vidosser is actually stepping a video. Trackpad pinch gestures (synthetic Ctrl + wheel) are accumulated into whole jumps. Respects `wheel_fullscreen_only` and `invert_direction`, and the overlay shows the jump.
+- **Save feedback**: prominent message *Fotograma guardado (frame N): name/path* (2.5 s, fades out; drawn inside the fullscreen element when a container is fullscreen), red error message, grey message on cancel, white flash over the video, and a WebAudio camera-shutter sound (error: low double beep). Settings `save_frame.toast`, `toast_ms`, `flash`, `sound`, `sound_volume`.
+- **Fullscreen with overlays** (`general.container_fullscreen`, default on): double-clicking a video or using the fullscreen button of WanGP's video player puts the player box fullscreen instead of the bare `<video>`, so the overlay, messages and loop bar are visible. The fullscreen button in the browser's native control bar can't be intercepted and stays native.
+- **Loop module**: `loop.loop_all` (loop every video, live, including videos added later); `L` toggles looping of the current video; frame-accurate **A-B segment loop** with `I` (in), `O` (out) and `U` (clear). Out before in is swapped; moving one end past the other end of a complete segment starts a new segment. Segments are per video and kept while the page is open, shown as a bar over the video's bottom edge, and confirmed by messages. Stepping is never clamped to the segment.
+- New keys are listed in the tab's key list, with duplicate-key validation across all actions. If an existing `settings.json` already uses one of the new default keys, the user's key wins and the new action gets a free key.
+### Changed
+- The jump settings are grouped as **Salto corto** in the tab (used by `W`/`Q` and modifier + wheel).
+### Fixed
+- Stepping backwards from the very end of a video (`currentTime == duration`, e.g. after it ended) could skip one frame.
+
 ## [1.2.0] - 2026-10-07
 ### Added
 - **Middle click (wheel click) saves the frame** over a video, or anywhere while a video or its container is fullscreen. Same as `D`, using the configured format, mode and folder. It saves exactly once per click, suppresses Windows/Chrome autoscroll, Linux paste and `auxclick`, and ignores a slight wheel roll while pressed. Middle clicks elsewhere (links, buttons, gallery thumbnails) are untouched. Setting `save_frame.middle_click_save` (default on).

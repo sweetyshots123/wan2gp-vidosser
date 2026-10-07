@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.2.0
+*[English](README.md)* · Licencia MIT · versión 1.3.0
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -10,6 +10,7 @@ Con la rueda del ratón:
 - **1 muesca de la rueda = exactamente 1 fotograma** (sin aceleración ni saltos: si giras rápido 7 muescas, avanza 7 fotogramas).
 - **Rueda abajo = fotograma siguiente**, rueda arriba = fotograma anterior.
 - **Shift + rueda = 10 fotogramas** por muesca.
+- **Ctrl + rueda = salto corto**: cada muesca da exactamente un *salto corto* (el mismo que Q / W, 0,5 s por defecto). El modificador se elige en la pestaña Vidosser (Ctrl, Alt, Shift, Meta/Cmd o ninguno). Vidosser solo bloquea el zoom del navegador con Ctrl + rueda cuando de verdad está moviendo un vídeo; en el resto de la página (y, con el ajuste por defecto, fuera de la pantalla completa) Ctrl + rueda hace zoom como siempre. Los gestos de pellizco del trackpad, que el navegador envía como Ctrl + rueda, se acumulan para que un gesto equivalga a un salto y no a decenas.
 - **Por defecto la rueda solo pasa fotogramas a pantalla completa** (la del vídeo o la de la galería); ahí funciona en cualquier punto de la pantalla. Fuera de la pantalla completa la rueda desplaza la página como siempre, aunque estés encima de un vídeo. Se puede cambiar en la pestaña Vidosser («Rueda solo a pantalla completa»): desactivado, la rueda pasa fotogramas con el ratón encima de cualquier vídeo.
 
 Con el teclado (teclas configurables en la pestaña **Vidosser**):
@@ -32,17 +33,32 @@ En general:
 - Formato **PNG** (sin pérdida) o **JPG** (calidad configurable, 95 por defecto).
 - Nombre: `<nombre del vídeo>_frame<NNNNN>.png` (o `.jpg`), por ejemplo `mi_video_frame00023.png`.
 - **Modo «Preguntar dónde guardar»** (por defecto): abre el diálogo «Guardar como» del navegador, que empieza en la última carpeta usada. Si cancelas, no se guarda nada. En navegadores sin ese diálogo (Firefox, Safari) o si el navegador lo bloquea, se descarga como una descarga normal.
-- **Modo «Guardar directamente en la carpeta»**: sin diálogo, se guarda en una carpeta **del equipo donde corre WanGP**. Por defecto es `<carpeta de salidas de WanGP>/frames` (se crea si no existe). **Nunca sobrescribe**: si el nombre ya existe, añade `_1`, `_2`... El indicador muestra «Guardado: <ruta completa>».
+- **Modo «Guardar directamente en la carpeta»**: sin diálogo, se guarda en una carpeta **del equipo donde corre WanGP**. Por defecto es `<carpeta de salidas de WanGP>/frames` (se crea si no existe). **Nunca sobrescribe**: si el nombre ya existe, añade `_1`, `_2`... El mensaje muestra la ruta completa.
+- **Aviso claro al guardar**: un mensaje grande abajo en la pantalla, «Fotograma guardado (frame N): nombre» (verde, 2,5 s y se desvanece; con la ruta completa en modo directo; en modo «Preguntar» aparece al cerrar el diálogo «Guardar como»), un destello blanco breve sobre el vídeo y un sonido de cámara de fotos. Si hay un error, el mensaje sale en rojo con un pitido grave doble; si cancelas el diálogo, sale en gris «No guardado (cancelado)». Si hay un contenedor a pantalla completa, el mensaje se dibuja dentro, así que también se ve ahí. Cada aviso se puede desactivar y el volumen se puede ajustar.
 - El **clic central** funciona encima del vídeo y, a pantalla completa, en cualquier punto (salvo botones y miniaturas). Guarda una sola vez por clic, no activa el desplazamiento automático de Windows ni pega texto, y si mueves un poco la rueda mientras lo pulsas no cambia de fotograma. En enlaces, botones, miniaturas de la galería y el resto de la página el clic central funciona como siempre. Se puede desactivar en la pestaña Vidosser.
 - Solo se guardan vídeos que estén dentro de las carpetas de WanGP (carpeta de WanGP, carpetas de salida y carpeta temporal de Gradio).
+
+## Pantalla completa con indicadores (`container_fullscreen`)
+
+El navegador no deja dibujar nada encima de un `<video>` en pantalla completa nativa. Por eso, al hacer **doble clic en un vídeo** o al usar el **botón de pantalla completa del reproductor de WanGP**, Vidosser pone a pantalla completa la caja del reproductor en lugar del vídeo: se ve igual, pero se ven el indicador de fotograma, los mensajes de guardado y la barra del bucle. Para salir, Esc o doble clic otra vez. Activado por defecto («Pantalla completa del vídeo con indicadores y mensajes»).
+
+El botón de pantalla completa **de la barra de controles propia del navegador** no se puede interceptar desde una página web, así que sigue siendo nativo; ahí el guardado se confirma con el sonido.
+
+## Bucle (`loop`)
+
+- **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (desactivado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
+- **Segmento A-B**: **I** marca el inicio y **O** el final en el fotograma actual. Al reproducir se repiten exactamente los fotogramas del inicio al final (exacto al fotograma, con `requestVideoFrameCallback`), también si el final es el último fotograma. Si marcas el final antes que el inicio, se intercambian; si mueves un extremo de un segmento ya completo más allá del otro, empieza un segmento nuevo. **U** borra el segmento. Si das al play fuera del segmento, empieza en el inicio. Los pasos de fotograma (rueda y teclas) no se limitan al segmento.
+- El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una barra naranja sobre el borde inferior del vídeo indica dónde está el segmento dentro del clip. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
 
 ## Pestaña de ajustes «Vidosser»
 
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
-- **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). No se permiten teclas repetidas.
-- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, salto en segundos o en fotogramas.
-- **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella.
-- **Indicador**: mostrarlo o no, y los fps que se usan si no se pueden detectar.
+- **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
+- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift.
+- **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
+- **Bucle**: repetir todos los vídeos en bucle.
+- **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
+- **Indicador y pantalla completa**: mostrar el indicador, pantalla completa con indicadores y mensajes, y los fps que se usan si no se pueden detectar.
 
 Al pulsar **Guardar ajustes** se comprueban los valores (teclas repetidas, números, carpeta), se guardan en `settings.json` dentro de la carpeta del plugin y **se aplican al momento, sin reiniciar WanGP**. Si tienes WanGP abierto en otras pestañas del navegador, recárgalas para que usen los nuevos ajustes. Si algo no es válido, no se guarda nada y se explica el motivo.
 
@@ -60,7 +76,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.2.0.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.3.0.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -87,6 +103,7 @@ Sección `general` (común a todas las herramientas):
 | `min_video_size` | 100 | ignora vídeos más pequeños que esto (miniaturas), en píxeles |
 | `show_overlay` | true | mostrar el indicador sobre el vídeo |
 | `overlay_ms` | 1200 | tiempo visible del indicador (ms) |
+| `container_fullscreen` | true | doble clic / botón del reproductor de WanGP = pantalla completa con indicadores y mensajes |
 
 Sección `keys` (una tecla por acción, sin distinguir mayúsculas; no actúan con Ctrl, Alt o Cmd):
 
@@ -98,6 +115,10 @@ Sección `keys` (una tecla por acción, sin distinguir mayúsculas; no actúan c
 | `jump_forward` | `"w"` | salto adelante |
 | `jump_back` | `"q"` | salto atrás |
 | `save_frame_as` | `"d"` | guardar el fotograma actual |
+| `toggle_loop` | `"l"` | bucle sí/no del vídeo actual |
+| `mark_in` | `"i"` | inicio del segmento A-B |
+| `mark_out` | `"o"` | final del segmento A-B |
+| `clear_segment` | `"u"` | borrar el segmento A-B |
 
 Sección `frame_step`:
 
@@ -106,11 +127,19 @@ Sección `frame_step`:
 | `enabled` | true | activar/desactivar esta herramienta |
 | `wheel_enabled` | true | paso de fotogramas con la rueda |
 | `wheel_fullscreen_only` | true | la rueda solo pasa fotogramas a pantalla completa (fuera de ella desplaza la página) |
+| `wheel_jump_modifier` | `"ctrl"` | modificador + rueda = salto corto: `"ctrl"`, `"alt"`, `"shift"`, `"meta"` o `"none"` |
 | `shift_frames` | 10 | fotogramas por muesca con Shift |
 | `invert_direction` | false | `true` = rueda arriba avanza |
 | `jump_mode` | `"seconds"` | `"seconds"` (usa `jump_seconds`) o `"frames"` (usa `jump_frames`) |
 | `jump_seconds` | 0.5 | salto en segundos (se redondea al fotograma más cercano) |
 | `jump_frames` | 8 | salto en fotogramas (si `jump_mode` es `"frames"`) |
+
+Sección `loop`:
+
+| opción | por defecto | significado |
+|---|---|---|
+| `enabled` | true | activar/desactivar esta herramienta |
+| `loop_all` | false | todos los vídeos en bucle |
 
 Sección `save_frame`:
 
@@ -122,10 +151,18 @@ Sección `save_frame`:
 | `mode` | `"ask"` | `"ask"` (diálogo «Guardar como») o `"direct"` (directo a la carpeta) |
 | `folder` | `""` | carpeta del modo directo; vacío = `<salidas de WanGP>/frames` |
 | `middle_click_save` | true | clic central (clic de la rueda) sobre el vídeo = guardar fotograma |
+| `toast` | true | mensaje «Fotograma guardado» |
+| `toast_ms` | 2500 | duración del mensaje (500-30000 ms) |
+| `flash` | true | destello blanco sobre el vídeo |
+| `sound` | true | sonido de cámara al guardar (pitido grave si falla) |
+| `sound_volume` | 60 | volumen (1-100) |
 
 ## Limitaciones
 
-- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del vídeo), la rueda y las teclas funcionan, pero el navegador no deja dibujar nada encima, así que no se ve el indicador. Con el botón de pantalla completa de la **galería** (arriba a la derecha) sí se ve.
+- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: no se ven el indicador, los mensajes, el destello ni la barra del bucle; el guardado se confirma con el sonido. Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
+- El bucle A-B vuelve al inicio justo antes de que se vea el fotograma siguiente al final. Es exacto al fotograma en Chrome/Edge (probado a 16 y 24 fps); con el equipo muy cargado o en navegadores sin `requestVideoFrameCallback` puede colarse algún fotograma de más antes de volver.
+- Los segmentos del bucle solo se guardan mientras la página está abierta.
+- Si eliges «Ninguno» como modificador del salto corto, Ctrl + rueda hace zoom en el navegador como siempre.
 - El clic central guarda al soltar el botón. Si lo mantienes pulsado más de unos 5 segundos en modo «Preguntar», el navegador ya no deja abrir el diálogo y el fotograma se descarga como una descarga normal.
 - Con el ratón de algunos fabricantes, el clic de la rueda puede estar asignado a otra función en su software (por ejemplo, Logitech Options). En ese caso el navegador no recibe el clic central.
 - El diálogo «Guardar como» solo existe en Chrome/Edge. En otros navegadores, o si el navegador lo bloquea porque la extracción tardó demasiado, el fotograma se descarga como una descarga normal.

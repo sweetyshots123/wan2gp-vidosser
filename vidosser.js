@@ -12,8 +12,11 @@
 //   MODULE frame_step   mouse wheel and keyboard frame stepping:
 //                       * 1 wheel notch = exactly 1 frame, Shift + wheel = shift_frames
 //                         (wheel_fullscreen_only: only while fullscreen; keys always work)
+//                       * wheel_jump_modifier (Ctrl) + wheel = one short jump per notch
 //                       * next_frame / prev_frame (S / A), jump_forward / jump_back
 //                         (W / Q: jump_seconds converted with the video fps, or jump_frames)
+//   MODULE container_fs video fullscreen on a container (not native) so overlays/toasts show
+//   MODULE loop         loop all videos, loop toggle (L), A-B segment loop (I / O, U = clear)
 //   MODULE save_frame   save_frame_as (D, or middle click on the video): saves the displayed frame (PNG/JPG), extracted
 //                       server-side from the source video (lossless, exact frame),
 //                       either with a "save as" dialog or straight into a folder.
@@ -378,6 +381,90 @@
             overlayTimer = setTimeout(() => { if (overlay) overlay.style.opacity = "0"; }, CFG.overlay_ms);
         }
 
+        // ------------------------------------------------------ feedback
+        // Prominent toast (bottom-center), rendered inside the fullscreen element when that
+        // is a container (gallery / container fullscreen), else in <body>. Nothing can be
+        // drawn over a natively fullscreen <video>: callers use sound() there.
+        const nativeVideoFs = () => fsElement() instanceof HTMLVideoElement;
+        let toastEl = null, toastTimer = 0;
+        function toast(text, kind = "ok", ms = 2500) {
+            const fs = fsElement();
+            if (fs instanceof HTMLVideoElement) return null;
+            const host = fs || document.body;
+            if (!toastEl) {
+                toastEl = document.createElement("div");
+                toastEl.className = "vidosser-toast";
+                toastEl.setAttribute("role", "status");
+                toastEl.setAttribute("aria-live", "polite");
+                toastEl.style.cssText = "position:fixed;left:50%;bottom:48px;transform:translateX(-50%) translateY(8px);" +
+                    "z-index:2147483647;pointer-events:none;max-width:min(90vw,900px);padding:12px 20px;border-radius:10px;" +
+                    "color:#fff;font:600 15px/1.35 system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45);" +
+                    "word-break:break-all;text-align:center;opacity:0;transition:opacity .25s,transform .25s;";
+            }
+            if (toastEl.parentNode !== host) host.appendChild(toastEl);
+            toastEl.dataset.kind = kind;
+            toastEl.style.background = kind === "error" ? "rgba(190,30,30,.95)" : kind === "info" ? "rgba(60,60,60,.93)" : "rgba(22,128,62,.95)";
+            toastEl.textContent = text;
+            void toastEl.offsetWidth;
+            toastEl.style.opacity = "1"; toastEl.style.transform = "translateX(-50%) translateY(0)";
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { toastEl.style.opacity = "0"; toastEl.style.transform = "translateX(-50%) translateY(8px)"; },
+                                    Math.max(500, Number(ms) || 2500));
+            return toastEl;
+        }
+
+        // Brief white flash + border pulse over the video picture (not in native fullscreen).
+        function flash(video) {
+            const fs = fsElement();
+            if (!video || fs === video) return null;
+            const r = video.getBoundingClientRect();
+            if (!r.width || !r.height) return null;
+            const f = document.createElement("div");
+            f.className = "vidosser-flash";
+            f.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;` +
+                "z-index:2147483646;pointer-events:none;background:rgba(255,255,255,.45);box-shadow:inset 0 0 0 4px #fff;" +
+                "border-radius:4px;opacity:1;transition:opacity .35s ease-out;";
+            (fs || document.body).appendChild(f);
+            requestAnimationFrame(() => requestAnimationFrame(() => { f.style.opacity = "0"; }));
+            setTimeout(() => f.remove(), 600);
+            return f;
+        }
+
+        // Camera-shutter sound synthesised with WebAudio (no file). kind "error" = low double beep.
+        let audioCtx = null;
+        function sound(kind = "ok", volume = 0.6) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return false;
+            try {
+                if (!audioCtx) audioCtx = new AC();
+                if (audioCtx.state === "suspended" && audioCtx.resume) audioCtx.resume();
+                const ctx = audioCtx, t0 = ctx.currentTime + 0.01, vol = Math.max(0, Math.min(1, Number(volume)));
+                const out = ctx.createGain(); out.gain.value = vol; out.connect(ctx.destination);
+                if (kind === "error") {
+                    for (const [dt, f] of [[0, 220], [0.16, 180]]) {
+                        const o = ctx.createOscillator(), g = ctx.createGain();
+                        o.type = "square"; o.frequency.value = f;
+                        g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.35, t0 + dt + 0.01);
+                        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.13);
+                        o.connect(g); g.connect(out); o.start(t0 + dt); o.stop(t0 + dt + 0.15);
+                    }
+                    return true;
+                }
+                // shutter: two filtered noise clicks (curtain open / close)
+                const len = Math.ceil(ctx.sampleRate * 0.2), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+                for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+                for (const [dt, peak, dur] of [[0, 1.0, 0.045], [0.075, 0.7, 0.06]]) {
+                    const src = ctx.createBufferSource(); src.buffer = buf;
+                    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = dt ? 2600 : 4200; bp.Q.value = 0.9;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(peak, t0 + dt + 0.003);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + dur);
+                    src.connect(bp); bp.connect(g); g.connect(out); src.start(t0 + dt); src.stop(t0 + dt + dur + 0.02);
+                }
+                return true;
+            } catch (_) { return false; }
+        }
+
         function fpsLabel(s) {
             return (Math.round(s.fps * 1000) / 1000) + " fps" + (s.fpsSource === "default" ? "?" : "");
         }
@@ -527,6 +614,7 @@
         return { CFG, KEYS, IS_FIREFOX, getInfo, ensureFps, lastFrameOf, probeMedia: probeMp4,
                  fsElement, eligible, isVisible, biggestVideoIn, videoAtPoint, videoForPointerEvent,
                  videoForKeyboard, touch, typingOrModal, showOverlay, fpsLabel, settled, seekTo, seekPending,
+                 toast, flash, sound, nativeVideoFs,
                  registerAction, bridge, bridgeResponse,
                  middlePress: null };                  // video under an ongoing middle-button press (save_frame)
     })(Object.assign({
@@ -534,6 +622,7 @@
         min_video_size: 100,      // ignore smaller videos (thumbnails), px
         show_overlay: true,
         overlay_ms: 1200,
+        container_fullscreen: true, // video fullscreen on its container (overlays/toasts visible) instead of native
     }, SETTINGS.general || {}), Object.assign({
         enabled: true,            // keyboard shortcuts on/off
         next_frame: "s",
@@ -541,6 +630,10 @@
         jump_forward: "w",
         jump_back: "q",
         save_frame_as: "d",
+        toggle_loop: "l",
+        mark_in: "i",
+        mark_out: "o",
+        clear_segment: "u",
     }, SETTINGS.keys || {}));
     V.core = core;
     V.config = { general: core.CFG, keys: core.KEYS };
@@ -564,7 +657,7 @@
 
         // ------------------------------------------------------- notch counting
         // Returns a signed integer number of notches (positive = wheel down).
-        const acc = { tick: 0, px: 0, last: 0 };
+        const acc = { tick: 0, px: 0, pinch: 0, last: 0 };
         let lineNotch = 0, pixelNotch = 0;
 
         function takeWhole(key, sign) {
@@ -581,7 +674,7 @@
             if (!d) return 0;
             const sign = Math.sign(d), a = Math.abs(d);
             const now = performance.now();
-            if (now - acc.last > 800) { acc.tick = 0; acc.px = 0; }          // forget stale fractions
+            if (now - acc.last > 800) { acc.tick = 0; acc.px = 0; acc.pinch = 0; }   // forget stale fractions
             acc.last = now;
             if (mode === 1) {                        // DOM_DELTA_LINE (Firefox mouse wheel): smallest value seen = 1 notch
                 lineNotch = lineNotch ? Math.min(lineNotch, a) : a;
@@ -607,6 +700,35 @@
             return takeWhole("px", sign);
         }
 
+        // Trackpad pinch arrives as wheel events with ctrlKey = true (Chrome/Edge/Firefox)
+        // while the Ctrl key is not physically down. Pinch deltas are small and continuous:
+        // accumulate them like a touchpad, PINCH_NOTCH delta units = one notch.
+        const PINCH_NOTCH = 50;
+        function countPinchNotches(e) {
+            const d = e.deltaY;
+            if (!d) return 0;
+            const sign = Math.sign(d), now = performance.now();
+            if (now - acc.last > 800) { acc.tick = 0; acc.px = 0; acc.pinch = 0; }
+            acc.last = now;
+            if (Math.sign(acc.pinch) === -sign) acc.pinch = 0;
+            acc.pinch += d / PINCH_NOTCH;
+            return takeWhole("pinch", sign);
+        }
+
+        // Physical Ctrl key state (to tell a real Ctrl+wheel from a synthetic pinch).
+        let ctrlDown = false;
+        const trackCtrl = e => { if (typeof e.ctrlKey === "boolean") ctrlDown = e.ctrlKey; };
+        window.addEventListener("keydown", e => { ctrlDown = e.key === "Control" ? true : e.ctrlKey; }, true);
+        window.addEventListener("keyup", e => { ctrlDown = e.key === "Control" ? false : e.ctrlKey; }, true);
+        window.addEventListener("pointermove", trackCtrl, { capture: true, passive: true });
+        window.addEventListener("pointerdown", trackCtrl, { capture: true, passive: true });
+        window.addEventListener("blur", () => { ctrlDown = false; });
+
+        const MODIFIERS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey", meta: "metaKey" };
+        function jumpModifier() {
+            const m = String(CFG.wheel_jump_modifier || "none").toLowerCase();
+            return MODIFIERS[m] ? m : "";
+        }
 
         // ------------------------------------------------------- stepping
         function jumpFrames(fps) {
@@ -632,7 +754,8 @@
             const ours = s.target !== null && s.targetFps === fps && s.lastSetTime !== null &&
                          (core.seekPending(video) || Math.abs(video.currentTime - s.lastSetTime) < 0.25 / fps);
             const base = ours ? s.target                                 // keep counting from our queued target
-                              : Math.floor(video.currentTime * fps + 1e-6); // resync (user played / scrubbed)
+                              : Math.max(0, Math.min(Number.isFinite(last) ? last : Infinity,   // resync (user played / scrubbed);
+                                    Math.floor(video.currentTime * fps + 1e-6)));            // at the very end currentTime = duration
             const target = Math.max(0, Math.min(last, base + n));
             let t = (target + 0.5) / fps;                                // middle of the frame: no rounding ambiguity
             const dur = video.duration;
@@ -656,20 +779,29 @@
         }
 
         // ---------------------------------------------------------- wheel
+        // Plain wheel: 1 notch = 1 frame (Shift: shift_frames). Wheel + wheel_jump_modifier
+        // (default Ctrl): 1 notch = 1 short jump (same amount as Q / W). The jump modifier
+        // wins over the Shift multiplier when both are "shift". Any other Ctrl/Alt/Meta
+        // combination is left to the browser (zoom...), and so is everything that does not
+        // act on a video (no preventDefault -> Ctrl+wheel zoom keeps working elsewhere).
         function onWheel(e) {
             if (CFG.enabled === false || !CFG.wheel_enabled) return;
-            // wheel_fullscreen_only: outside fullscreen the wheel is left completely alone (page scroll)
+            // wheel_fullscreen_only: outside fullscreen the wheel is left completely alone (page scroll / zoom)
             if (CFG.wheel_fullscreen_only && !core.fsElement()) return;
-            if (e.ctrlKey || e.metaKey || e.altKey) return;            // keep browser zoom etc.
+            const jm = jumpModifier();
+            const jump = !!jm && e[MODIFIERS[jm]];
+            if (!jump && (e.ctrlKey || e.metaKey || e.altKey)) return;  // keep browser zoom etc.
             const video = core.videoForPointerEvent(e);
             if (!video) return;
-            e.preventDefault();                                         // never scroll the page over a video
+            e.preventDefault();                                         // no page scroll / zoom over a video we act on
             e.stopPropagation();
             if (core.middlePress) return;   // wheel nudged while clicking it: don't move away from the frame being saved
-            let notches = countNotches(e);
+            const pinch = jm === "ctrl" && e.ctrlKey && !ctrlDown && !e.metaKey;
+            let notches = pinch ? countPinchNotches(e) : countNotches(e);
             if (!notches) return;
             if (CFG.invert_direction) notches = -notches;
-            queueSteps(video, notches * (e.shiftKey ? Math.max(1, Math.round(CFG.shift_frames)) : 1), 0);
+            if (jump) queueSteps(video, 0, notches);
+            else queueSteps(video, notches * (e.shiftKey ? Math.max(1, Math.round(CFG.shift_frames)) : 1), 0);
         }
 
         // ------------------------------------------------------- keyboard
@@ -691,6 +823,7 @@
         enabled: true,
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
+        wheel_jump_modifier: "ctrl",  // modifier + wheel = one short jump per notch: ctrl | alt | shift | meta | none
         shift_frames: 10,
         invert_direction: false,
         jump_mode: "seconds",     // "seconds" | "frames"
@@ -738,6 +871,14 @@
             setTimeout(() => URL.revokeObjectURL(a.href), 60000);
         }
 
+        // Result feedback: toast (+ white flash) when the DOM can be seen, shutter / error
+        // sound (save_frame.sound) - the only feedback possible in native <video> fullscreen.
+        function feedback(video, kind, text) {
+            if (CFG.toast !== false) core.toast(text, kind, CFG.toast_ms);
+            if (kind === "ok" && CFG.flash !== false) core.flash(video);
+            if (CFG.sound !== false && kind !== "info") core.sound(kind, Number(CFG.sound_volume) / 100);
+        }
+
         let busy = false;
         async function saveFrameAs(video) {
             if (CFG.enabled === false || busy) return;
@@ -754,6 +895,8 @@
                 catch (err) { res = { ok: false, error: err.message, bridgeMissing: !!err.bridgeMissing }; }
                 if (mode === "direct") {
                     core.showOverlay(video, res.ok ? `Guardado: ${res.path}` : `Error al guardar: ${res.error}`);
+                    if (res.ok) feedback(video, "ok", `Fotograma guardado (frame ${res.frame}): ${res.path}`);
+                    else feedback(video, "error", `Error al guardar: ${res.error}`);
                     return res;
                 }
                 let blob, name, frame;
@@ -762,7 +905,11 @@
                     frame = Math.floor(t * info.fps + 1e-6);
                     name = `${stemFromUrl(video.currentSrc)}_frame${String(frame).padStart(5, "0")}.${ext()}`;
                     try { blob = await canvasCapture(video); }
-                    catch (err) { core.showOverlay(video, `Error al guardar: ${res.error || err.message}`); return res; }
+                    catch (err) {
+                        core.showOverlay(video, `Error al guardar: ${res.error || err.message}`);
+                        feedback(video, "error", `Error al guardar: ${res.error || err.message}`);
+                        return res;
+                    }
                 }
                 if (typeof window.showSaveFilePicker === "function") {
                     const types = [ext() === "jpg" ? { description: "JPEG", accept: { "image/jpeg": [".jpg", ".jpeg"] } }
@@ -775,14 +922,20 @@
                         await w.write(blob); await w.close();
                         lastHandle = handle;
                         core.showOverlay(video, `Guardado frame ${frame}: ${handle.name}`);
+                        feedback(video, "ok", `Fotograma guardado (frame ${frame}): ${handle.name}`);
                         return { ok: true, frame, name: handle.name, via: "picker" };
                     } catch (err) {
-                        if (err && err.name === "AbortError") { core.showOverlay(video, "Cancelado"); return { ok: false, cancelled: true }; }
+                        if (err && err.name === "AbortError") {
+                            core.showOverlay(video, "Cancelado");
+                            feedback(video, "info", `No guardado (cancelado): frame ${frame}`);
+                            return { ok: false, cancelled: true };
+                        }
                         // no user activation left / API refused: fall back to a normal download
                     }
                 }
                 download(blob, name);
                 core.showOverlay(video, `Guardado frame ${frame} (descarga): ${name}`);
+                feedback(video, "ok", `Fotograma descargado (frame ${frame}): ${name}`);
                 return { ok: true, frame, name, via: "download" };
             } finally { busy = false; }
         }
@@ -852,7 +1005,274 @@
         mode: "ask",              // "ask" (save-as dialog) | "direct" (server-side, into folder)
         folder: "",               // direct mode folder ("" = <WanGP outputs>/frames)
         middle_click_save: true,  // middle mouse button on a video = save frame
+        toast: true,              // prominent "Fotograma guardado" toast
+        toast_ms: 2500,
+        flash: true,              // white flash over the video on save
+        sound: true,              // shutter / error sound (only feedback in native <video> fullscreen)
+        sound_volume: 60,         // 1..100
     }, SETTINGS.save_frame || {}));
+
+    // =======================================================================
+    // MODULE container_fs - video fullscreen on a container instead of the native
+    // <video> fullscreen, so overlays / toasts can be drawn (general.container_fullscreen)
+    // =======================================================================
+    // A natively fullscreen <video> cannot have anything drawn above it. Swapping after
+    // the fact is impossible (Chrome: the fullscreen request has consumed the user
+    // activation -> "Permissions check failed"), so the request is intercepted BEFORE it
+    // happens, inside the same user gesture:
+    //   * double-click on a video with native controls: the 2nd mousedown (detail 2) is
+    //     cancelled (Chrome's controls then do not go native) and the container goes
+    //     fullscreen; double-click again exits.
+    //   * page-initiated video.requestFullscreen() (e.g. the gr.Video player's
+    //     fullscreen icon) is redirected to the container.
+    // Not interceptable: the fullscreen button inside the browser's native control bar
+    // (it stays native fullscreen; save feedback is then the shutter sound).
+    V.modules.container_fs = (function (core, GEN) {
+        const CLS = "vidosser-fs-container";
+        const nativeRequest = Element.prototype.requestFullscreen;
+        const style = document.createElement("style");
+        style.textContent =
+            `.${CLS}:fullscreen{background:#000!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;` +
+            `display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;margin:0!important;}` +
+            `.${CLS}:fullscreen>*:not(.controls){flex:1 1 auto!important;min-height:0!important;width:100%!important;max-height:none!important;` +
+            `display:flex!important;align-items:center!important;justify-content:center!important;}` +
+            `.${CLS}:fullscreen video{width:100%!important;height:100%!important;max-width:100vw!important;max-height:100vh!important;object-fit:contain!important;}`;
+        (document.head || document.documentElement).appendChild(style);
+
+        function containerFor(video) {
+            const gallery = video.closest(".gallery-container");
+            if (gallery) return gallery;                          // Gradio's own gallery fullscreen layout
+            let a = video.parentElement;
+            for (let i = 0; a && i < 3; i++, a = a.parentElement) {
+                if (a.querySelector('.controls, [aria-label="full-screen"]')) return a;   // player root (video + controls)
+                if (a.classList.contains("block")) break;
+            }
+            return video.parentElement;
+        }
+        const enabled = video => GEN.container_fullscreen !== false && video instanceof HTMLVideoElement &&
+                                 !video.closest(".thumbnail-item") && core.eligible(video, null);
+
+        function enter(video) {
+            const c = containerFor(video);
+            if (!c) return nativeRequest.call(video);
+            if (!c.classList.contains("gallery-container")) c.classList.add(CLS);
+            core.touch(video);
+            return nativeRequest.call(c);
+        }
+
+        // page-initiated requests on a <video> -> container
+        const ownRequest = function (options) {
+            return enabled(this) ? enter(this) : nativeRequest.call(this, options);
+        };
+        Object.defineProperty(HTMLVideoElement.prototype, "requestFullscreen", { value: ownRequest, configurable: true, writable: true });
+
+        // double-click on a native-controls video
+        let swallowDblUntil = 0;
+        window.addEventListener("mousedown", e => {
+            if (e.button !== 0 || e.detail !== 2) return;
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement) || !v.controls || !enabled(v)) return;
+            e.preventDefault(); e.stopPropagation();
+            swallowDblUntil = performance.now() + 1000;
+            const fs = core.fsElement();
+            if (fs && (fs === v || fs.contains(v))) document.exitFullscreen().catch(() => {});
+            else enter(v).catch(() => {});
+        }, true);
+        window.addEventListener("dblclick", e => {
+            if (performance.now() < swallowDblUntil && e.target instanceof HTMLVideoElement) { e.preventDefault(); e.stopPropagation(); }
+        }, true);
+        document.addEventListener("fullscreenchange", () => {
+            const fs = core.fsElement();
+            for (const el of document.querySelectorAll("." + CLS)) if (el !== fs) el.classList.remove(CLS);
+        });
+        return { config: GEN, containerFor, enter, nativeRequest };
+    })(core, V.config.general);
+
+    // =======================================================================
+    // MODULE loop - loop all videos, per-video loop toggle (L), A-B segment loop (I / O / U)
+    // =======================================================================
+    V.modules.loop = (function (core, CFG) {
+        // ---------------------------------------------------------- loop all / toggle
+        const origLoop = new WeakMap();          // loop attribute before we touched the element
+        const override = new Map();              // src -> loop forced by the toggle key
+        const srcOf = v => v.currentSrc || v.src || "";
+
+        function applyLoop(v) {
+            if (!(v instanceof HTMLVideoElement)) return;
+            if (!origLoop.has(v)) origLoop.set(v, v.loop);
+            const src = srcOf(v);
+            const want = override.has(src) ? override.get(src) : (CFG.enabled !== false && CFG.loop_all ? true : origLoop.get(v));
+            if (v.loop !== want) v.loop = want;
+        }
+        const applyAll = () => document.querySelectorAll("video").forEach(applyLoop);
+        new MutationObserver(ms => {
+            for (const m of ms) for (const n of m.addedNodes) {
+                if (n instanceof HTMLVideoElement) applyLoop(n);
+                else if (n.querySelectorAll) n.querySelectorAll("video").forEach(applyLoop);
+            }
+        }).observe(document.documentElement, { childList: true, subtree: true });
+        document.addEventListener("loadedmetadata", e => applyLoop(e.target), true);   // src swapped in place
+        applyAll();
+
+        core.registerAction("toggle_loop", v => {
+            if (CFG.enabled === false) return;
+            const on = !v.loop;
+            override.set(srcOf(v), on);
+            applyLoop(v);
+            core.toast(on ? "Bucle activado (este vídeo)" : "Bucle desactivado (este vídeo)", "info", 1800);
+            core.showOverlay(v, on ? "Bucle: sí" : "Bucle: no");
+        });
+
+        // ------------------------------------------------------------- A-B segment
+        const segments = new Map();              // src -> { in, out } (frames), kept while the page is open
+        const segOf = v => segments.get(srcOf(v));
+        const ready = s => s && s.in !== null && s.out !== null;
+
+        // rVFC mediaTime / currentTime are rounded to microseconds, so 41/24 s can read as
+        // 40.99999 frames: use a tolerance of 1/1000 frame.
+        const frameAt = (t, fps) => Math.floor(t * fps + 1e-3);
+        async function currentFrame(v) {
+            if (v.paused) await core.settled(v);
+            const info = await core.ensureFps(v);
+            const last = core.lastFrameOf(v, info);
+            const f = frameAt(v.currentTime, info.fps);
+            return { f: Math.max(0, Number.isFinite(last) ? Math.min(last, f) : f), fps: info.fps };
+        }
+        async function mark(v, which) {
+            if (CFG.enabled === false) return;
+            const { f } = await currentFrame(v);
+            const src = srcOf(v);
+            const s = segments.get(src) || { in: null, out: null };
+            const other = which === "in" ? "out" : "in", wasComplete = ready(s);
+            s[which] = f;
+            let swapped = false, fresh = false;
+            if (ready(s) && s.out < s.in) {
+                // completing a segment in reverse order (O before I) -> swap; moving one end of an
+                // existing segment past the other end -> start a new segment from this mark
+                if (wasComplete) { s[other] = null; fresh = true; }
+                else { [s.in, s.out] = [s.out, s.in]; swapped = true; }
+            }
+            segments.set(src, s);
+            const label = which === "in" ? `Inicio de bucle: frame ${f}` : `Final de bucle: frame ${f}`;
+            const tail = ready(s) ? `  ·  bucle ${s.in}–${s.out}${swapped ? " (intercambiados)" : ""}`
+                : fresh ? `  ·  nuevo segmento (falta ${other === "out" ? "el final" : "el inicio"})` : "";
+            core.toast(label + tail, "info", 2200);
+            core.showOverlay(v, label);
+            watch(v); drawBar(v);
+        }
+        core.registerAction("mark_in", v => mark(v, "in"));
+        core.registerAction("mark_out", v => mark(v, "out"));
+        core.registerAction("clear_segment", v => {
+            if (CFG.enabled === false) return;
+            segments.delete(srcOf(v));
+            clearTimeout(timers.get(v)); timers.delete(v);
+            core.toast("Bucle borrado", "info", 1800);
+            core.showOverlay(v, "Bucle borrado");
+            drawBar(v);
+        });
+
+        // Playback enforcement (frame accurate): on every presented frame inside [in, out]
+        // the moment frame out+1 would appear is known (rVFC expectedDisplayTime + the
+        // remaining frame durations), so a single timer is re-armed to seek back to `in`
+        // a safety margin before it. A seek freezes the current picture until `in` is
+        // decoded, so `out` stays on screen and out+1 is never shown. Overshoot (frame > out,
+        // e.g. a late timer) or a frame before `in` jumps to `in` at once.
+        const timers = new WeakMap(), watching = new WeakSet();
+        function seekIn(v, s, fps) {
+            clearTimeout(timers.get(v)); timers.delete(v);
+            core.seekTo(v, s.in / fps + 0.001);
+        }
+        function check(v, mediaTime, displayAt) {
+            const s = segOf(v), info = core.getInfo(v);
+            if (!ready(s) || !info.fps || v.paused) return;
+            const fps = info.fps, f = frameAt(mediaTime, fps);
+            if (f > s.out || f < s.in) { seekIn(v, s, fps); return; }
+            const rate = v.playbackRate || 1, fd = 1000 / fps / rate;
+            const outEnds = (displayAt || performance.now()) + ((s.out + 1) / fps - mediaTime) * 1000 / rate;
+            const margin = Math.min(0.45 * fd, 28);
+            clearTimeout(timers.get(v));
+            timers.set(v, setTimeout(() => {
+                timers.delete(v);
+                const s2 = segOf(v);
+                if (ready(s2) && !v.paused) seekIn(v, s2, fps);
+            }, Math.max(0, outEnds - margin - performance.now())));
+        }
+        function watch(v) {
+            if (watching.has(v)) return;
+            watching.add(v);
+            const rvfc = typeof v.requestVideoFrameCallback === "function";
+            const tick = (now, meta) => {
+                if (!v.isConnected) { watching.delete(v); return; }
+                const hasMeta = meta && typeof meta.mediaTime === "number";
+                check(v, hasMeta ? meta.mediaTime : v.currentTime, hasMeta ? meta.expectedDisplayTime : 0);
+                if (rvfc) v.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
+            };
+            if (rvfc) v.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
+            v.addEventListener("pause", () => { clearTimeout(timers.get(v)); timers.delete(v); });
+            v.addEventListener("play", () => {
+                const s = segOf(v), info = core.getInfo(v);
+                if (!ready(s) || !info.fps) return;
+                const f = frameAt(v.currentTime, info.fps);
+                if (f < s.in || f > s.out) seekIn(v, s, info.fps);   // play from outside the segment -> start at `in`
+                else check(v, v.currentTime, performance.now());     // paused on `out`: no rVFC for that frame, arm the wrap now
+            });
+            v.addEventListener("ended", () => {                    // `out` = last frame: loop instead of stopping
+                const s = segOf(v), info = core.getInfo(v);
+                if (ready(s) && info.fps) { seekIn(v, s, info.fps); v.play().catch(() => {}); }
+            });
+        }
+        document.addEventListener("play", e => { if (e.target instanceof HTMLVideoElement && segOf(e.target)) watch(e.target); }, true);
+
+        // ---------------------------------------------------------- segment marker bar
+        // Thin bar on the bottom edge of the video picture: whole timeline faint, the A-B
+        // segment highlighted (a single tick while only one end is set).
+        const bars = new Map();                  // video -> element
+        function drawBar(v) {
+            const s = segOf(v);
+            let bar = bars.get(v);
+            const fs = core.fsElement();
+            if (!s || fs === v || !v.isConnected || !core.isVisible(v)) { if (bar) bar.style.display = "none"; return; }
+            const info = core.getInfo(v), last = core.lastFrameOf(v, info);
+            if (!info.fps || !Number.isFinite(last)) { if (bar) bar.style.display = "none"; return; }
+            if (!bar) {
+                bar = document.createElement("div");
+                bar.className = "vidosser-loop-bar";
+                bar.style.cssText = "position:fixed;height:6px;z-index:2147483645;pointer-events:none;background:rgba(255,255,255,.18);border-radius:3px;";
+                bar.innerHTML = '<div class="vidosser-loop-seg" style="position:absolute;top:0;bottom:0;background:#ffb000;border-radius:3px;box-shadow:0 0 6px #ffb000;"></div>';
+                bars.set(v, bar);
+            }
+            const host = fs || document.body;
+            if (bar.parentNode !== host) host.appendChild(bar);
+            const r = v.getBoundingClientRect();
+            let x = r.left, y = r.top, w = r.width, h = r.height;
+            if (v.videoWidth && v.videoHeight) {
+                const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+                w = v.videoWidth * k; h = v.videoHeight * k; x += (r.width - w) / 2; y += (r.height - h) / 2;
+            }
+            const total = last + 1;
+            const a = s.in !== null ? s.in : s.out, b = s.out !== null ? s.out : s.in;
+            const seg = bar.firstChild;
+            seg.style.left = (a / total * 100) + "%";
+            seg.style.width = Math.max(0.6, (b + 1 - a) / total * 100) + "%";
+            seg.dataset.in = s.in === null ? "" : s.in; seg.dataset.out = s.out === null ? "" : s.out;
+            Object.assign(bar.style, { display: "block", left: Math.round(x) + "px", top: Math.round(y + h - 8) + "px", width: Math.round(w) + "px" });
+        }
+        const redrawAll = () => { for (const v of [...bars.keys()]) { if (!v.isConnected) { bars.get(v).remove(); bars.delete(v); } else drawBar(v); } };
+        window.addEventListener("scroll", redrawAll, { capture: true, passive: true });
+        window.addEventListener("resize", redrawAll);
+        document.addEventListener("fullscreenchange", () => setTimeout(redrawAll, 50));
+        document.addEventListener("loadedmetadata", e => { if (bars.has(e.target)) drawBar(e.target); }, true);
+        setInterval(redrawAll, 500);
+
+        return {
+            config: CFG, segments,
+            segment: v => { const s = segOf(v); return s ? { in: s.in, out: s.out } : null; },
+            onSettings: applyAll,
+        };
+    })(core, V.config.loop = Object.assign({
+        enabled: true,
+        loop_all: false,          // every <video> plays in loop
+    }, SETTINGS.loop || {}));
 
     // =======================================================================
     // Add future modules here:  V.modules.<name> = (function (core, CFG) { ... })(core, V.config.<name> = {...});
@@ -866,6 +1286,7 @@
             if (V.config[section] && values && typeof values === "object") Object.assign(V.config[section], values);
         }
         V.settings = next;
+        for (const m of Object.values(V.modules)) if (m && typeof m.onSettings === "function") { try { m.onSettings(); } catch (_) {} }
         return true;
     };
     // Settings saved after the server started are published in a hidden textbox of the
