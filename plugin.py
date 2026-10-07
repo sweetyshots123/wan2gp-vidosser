@@ -27,6 +27,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import traceback
 import urllib.parse
 from pathlib import Path
@@ -52,7 +53,9 @@ DEFAULT_SETTINGS = {
         "min_video_size": 100,      # ignore tiny videos (thumbnails) smaller than this, in px
         "show_overlay": True,       # small info badge on the video (not possible in native <video> fullscreen)
         "overlay_ms": 1200,         # how long the badge stays visible (ms)
-        "container_fullscreen": True,  # video fullscreen (double-click / player button) on its container
+        "container_fullscreen": True,
+        "hide_controls": "fullscreen",  # hide the video control bars: "off" | "fullscreen" | "always"
+        "show_thin_progress": True,     # thin 3 px progress line at the bottom edge while controls are hidden  # video fullscreen (double-click / player button) on its container
                                        # instead of native <video> fullscreen, so overlays/toasts show
     },
     "keys": {                       # one key per action (case-insensitive, ignored while typing)
@@ -80,6 +83,9 @@ DEFAULT_SETTINGS = {
         "drag_pixels_per_frame": 8, # horizontal pixels per frame while dragging (1..200)
         "drag_invert": False,       # False: drag right = forward, drag left = backward
         "drag_button": "left",      # "left" | "right" (right: the context menu opens only for a plain right click)
+        "drag_pointer_lock": True,  # Pointer Lock while scrubbing: hidden cursor, no screen edge (Chrome shows its
+                                    # "press Esc" banner); released on button release / blur / Esc
+        "drag_hide_cursor": True,   # hide the cursor while scrubbing (fallback when pointer lock is off or refused)
         "jump_mode": "seconds",     # "seconds": jump_seconds converted with the video fps, "frames": jump_frames
         "jump_seconds": 0.5,
         "jump_frames": 8,
@@ -107,7 +113,9 @@ _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("save_frame", "format"): ("png", "jpg"),
             ("save_frame", "mode"): ("ask", "direct"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
-            ("frame_step", "drag_button"): ("left", "right")}
+            ("frame_step", "drag_button"): ("left", "right"),
+            ("general", "hide_controls"): ("off", "fullscreen", "always")}
+HIDE_CONTROLS_CHOICES = [("No", "off"), ("Solo a pantalla completa", "fullscreen"), ("Siempre", "always")]
 DRAG_BUTTON_CHOICES = [("Izquierdo", "left"), ("Derecho", "right")]
 JUMP_MODIFIER_CHOICES = [("Ctrl", "ctrl"), ("Alt", "alt"), ("Shift", "shift"), ("Meta (Cmd / Win)", "meta"), ("Ninguno", "none")]
 _ALLOW_EMPTY = {("save_frame", "folder")}
@@ -322,6 +330,15 @@ class VidosserPlugin(WAN2GPPlugin):
                 drag_ppf = gr.Number(label="Píxeles por fotograma al arrastrar", value=current("frame_step", "drag_pixels_per_frame"), precision=0,
                                      minimum=1, maximum=200, elem_id="vidosser_drag_pixels_per_frame")
                 drag_invert = gr.Checkbox(label="Invertir sentido al arrastrar", value=current("frame_step", "drag_invert"), elem_id="vidosser_drag_invert")
+            with gr.Row():
+                drag_pointer_lock = gr.Checkbox(label="Bloquear el puntero al arrastrar (sin tope en el borde de la pantalla)",
+                                                value=current("frame_step", "drag_pointer_lock"), elem_id="vidosser_drag_pointer_lock",
+                                                info="El cursor desaparece y el arrastre no se detiene en el borde de la pantalla. Chrome muestra arriba "
+                                                     "su aviso «Pulsa Esc para mostrar el cursor»: es normal. Al soltar el botón, Esc o cambiar de ventana "
+                                                     "el puntero se libera.")
+                drag_hide_cursor = gr.Checkbox(label="Ocultar el cursor mientras arrastras", value=current("frame_step", "drag_hide_cursor"),
+                                               elem_id="vidosser_drag_hide_cursor",
+                                               info="Se usa cuando el bloqueo del puntero está desactivado o el navegador lo rechaza.")
         with gr.Group():
             gr.Markdown("### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido.")
             with gr.Row():
@@ -367,6 +384,11 @@ class VidosserPlugin(WAN2GPPlugin):
                                            elem_id="vidosser_container_fullscreen",
                                            info="Doble clic en el vídeo o el botón de pantalla completa del reproductor de WanGP usan una pantalla completa "
                                                 "en la que se ven el indicador y los mensajes. El botón de pantalla completa de la barra nativa del navegador sigue siendo nativo.")
+                hide_controls = gr.Dropdown(label="Ocultar la barra de controles del vídeo", choices=HIDE_CONTROLS_CHOICES,
+                                            value=current("general", "hide_controls"), elem_id="vidosser_hide_controls",
+                                            info="Sin barra, el clic (o la barra espaciadora) sigue pausando / reproduciendo y todo el vídeo sirve para arrastrar.")
+                thin_progress = gr.Checkbox(label="Barra de progreso fina (3 px) cuando los controles están ocultos", value=current("general", "show_thin_progress"),
+                                            elem_id="vidosser_show_thin_progress")
                 default_fps = gr.Number(label="FPS si no se pueden detectar", value=current("general", "default_fps"), minimum=1, elem_id="vidosser_default_fps")
         save_btn = gr.Button("Guardar ajustes", variant="primary", elem_id="vidosser_save_settings")
         status = gr.Markdown("", elem_id="vidosser_status")
@@ -379,7 +401,7 @@ class VidosserPlugin(WAN2GPPlugin):
 
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
-                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button]
+                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress]
         save_btn.click(fn=self._save_from_ui, inputs=inputs, outputs=[status, settings_json], show_progress="hidden").then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
         check_btn.click(fn=self._check_folder_ui, inputs=[folder], outputs=[folder_status], show_progress="hidden")
@@ -392,7 +414,7 @@ class VidosserPlugin(WAN2GPPlugin):
 
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
-                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button")
+                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, then the fields of _UI_FIELDS (same order as `inputs`)."""
@@ -404,7 +426,9 @@ class VidosserPlugin(WAN2GPPlugin):
                          jump_mode="seconds", jump_seconds=0.5, jump_frames=8, sf_format="png", jpg_quality=95, sf_mode="ask",
                          folder="", show_overlay=True, default_fps=16, middle_click=True, wheel_fs_only=True, jump_modifier="ctrl",
                          toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=False,
-                         drag_scrub=True, drag_ppf=8, drag_invert=False, drag_button="left"):
+                         drag_scrub=True, drag_ppf=8, drag_invert=False, drag_button="left",
+                         drag_hide_cursor=True, drag_pointer_lock=True,
+                         hide_controls="fullscreen", thin_progress=True):
         settings = load_settings()
         keys, errors = validate_keys(key_values)
         def number(value, label, minimum, maximum, integer):
@@ -432,18 +456,22 @@ class VidosserPlugin(WAN2GPPlugin):
         jump_modifier = str(jump_modifier or "none").lower()
         if jump_modifier not in _CHOICES[("frame_step", "wheel_jump_modifier")]:
             errors.append("«Modificador + rueda = salto corto»: valor no válido.")
+        hide_controls = str(hide_controls or "fullscreen").lower()
+        if hide_controls not in ("off", "fullscreen", "always"):
+            errors.append("«Ocultar la barra de controles del vídeo»: valor no válido.")
         drag_button = str(drag_button or "left").lower()
         if drag_button not in ("left", "right"):
             errors.append("«Botón para arrastrar»: valor no válido.")
         if errors:
-            return "❌ No se ha guardado:\n\n- " + "\n- ".join(errors), gr.update()
+            return f"❌ No se ha guardado ({time.strftime('%H:%M:%S')}):\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
         notes = []
         if jump_modifier == "shift":
             notes.append(f"Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y "
                          f"los «Fotogramas con Shift + rueda» ({shift_frames}) no se usan.")
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
-                                      drag_invert=bool(drag_invert), drag_button=drag_button)
+                                      drag_invert=bool(drag_invert), drag_button=drag_button,
+                                      drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock))
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)
@@ -451,13 +479,15 @@ class VidosserPlugin(WAN2GPPlugin):
                                       mode=sf_mode if sf_mode in ("ask", "direct") else "ask", folder=folder,
                                       middle_click_save=bool(middle_click), toast=bool(toast), toast_ms=int(round(toast_s * 1000)),
                                       flash=bool(flash), sound=bool(sound), sound_volume=sound_volume)
-        settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs))
+        settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs),
+                                   hide_controls=hide_controls, show_thin_progress=bool(thin_progress))
         settings["loop"].update(loop_all=bool(loop_all))
         try:
             save_settings(settings)
         except Exception as e:
             return f"❌ No se ha podido escribir settings.json: {e}", gr.update()
-        message = "✅ Ajustes guardados y aplicados (en otras pestañas del navegador ya abiertas, recarga la página)."
+        message = (f"✅ Ajustes guardados y aplicados a las {time.strftime('%H:%M:%S')} "
+                   "(en otras pestañas del navegador ya abiertas, recarga la página).")
         if notes:
             message += "\n\n⚠️ " + "\n\n⚠️ ".join(notes)
         return message, json.dumps(settings)

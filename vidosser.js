@@ -616,13 +616,16 @@
                  videoForKeyboard, touch, typingOrModal, showOverlay, fpsLabel, settled, seekTo, seekPending,
                  toast, flash, sound, nativeVideoFs,
                  registerAction, bridge, bridgeResponse,
-                 middlePress: null };                  // video under an ongoing middle-button press (save_frame)
+                 middlePress: null,                    // video under an ongoing middle-button press (save_frame)
+                 dragEndedAt: 0 };                     // time the last drag-scrub ended (frame_step)                  // video under an ongoing middle-button press (save_frame)
     })(Object.assign({
         default_fps: 16,          // fallback when fps cannot be detected (Wan = 16, LTX = 24/25...)
         min_video_size: 100,      // ignore smaller videos (thumbnails), px
         show_overlay: true,
         overlay_ms: 1200,
         container_fullscreen: true, // video fullscreen on its container (overlays/toasts visible) instead of native
+        hide_controls: "fullscreen", // hide video control bars: "off" | "fullscreen" | "always"
+        show_thin_progress: true,   // 3 px progress line at the bottom edge while the controls are hidden
     }, SETTINGS.general || {}), Object.assign({
         enabled: true,            // keyboard shortcuts on/off
         next_frame: "s",
@@ -827,7 +830,7 @@
         // (bottom CONTROLS_PX of a <video controls>), thumbnails or anything that is not
         // the video itself. Independent of wheel_fullscreen_only.
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
-        let drag = null, swallowClickUntil = 0, swallowMenuUntil = 0;
+        let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
         function dragUnit(e) {
             const jm = jumpModifier();
@@ -836,7 +839,9 @@
             return { frames: 1, jumps: 0 };
         }
         function onDragDown(e) {
-            if (CFG.enabled === false || CFG.drag_scrub === false || drag) return;
+            if (drag) endDrag("stale", false);                          // a release we never saw: start clean
+            swallowClickUntil = 0; swallowMenuUntil = 0;                // a new press: an expected click/menu never came (pointer lock)
+            if (CFG.enabled === false || CFG.drag_scrub === false) return;
             if (!e.isPrimary || (e.pointerType === "pen" && e.pressure === 0)) return;
             const button = e.pointerType === "touch" ? 0 : dragButton();     // a finger always scrubs
             if (e.button !== button) return;
@@ -848,18 +853,65 @@
                 const r = v.getBoundingClientRect();
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
-            drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, active: false, done: 0, type: e.pointerType, button };
+            drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, lock: null, active: false, done: 0, type: e.pointerType, button };
         }
+        // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
+        // element, also inside a fullscreen container), on the capturing video and on the
+        // fullscreen element. Every way a drag can end goes through endDrag(), which always
+        // removes the classes: pointerup / pointercancel / lostpointercapture / Escape /
+        // window blur / tab hidden / fullscreen change / pointer lock lost / a move with no
+        // button pressed (missed release).
+        const cursorCss = document.createElement("style");
+        cursorCss.textContent = "html.vidosser-scrubbing,html.vidosser-scrubbing *,.vidosser-scrub-el,.vidosser-scrub-el *{cursor:none!important}";
+        document.head.appendChild(cursorCss);
+        let hiddenOn = [];
+        function hideCursor(v) {
+            showCursor();
+            hiddenOn = [document.documentElement, v, core.fsElement()].filter(Boolean);
+            hiddenOn.forEach((el, k) => el.classList.add(k ? "vidosser-scrub-el" : "vidosser-scrubbing"));
+        }
+        function showCursor() {
+            for (const el of hiddenOn) el.classList.remove("vidosser-scrubbing", "vidosser-scrub-el");
+            hiddenOn = [];
+            document.documentElement.classList.remove("vidosser-scrubbing");
+            document.querySelectorAll(".vidosser-scrub-el").forEach(el => el.classList.remove("vidosser-scrub-el"));
+        }
+        // Pointer Lock (drag_pointer_lock, default on): the cursor disappears, can't hit the
+        // screen edge and movementX keeps flowing (Chrome shows its "press Esc" banner). If
+        // the lock is refused, the drag continues with pointer capture + hidden cursor.
+        function startLock(d) {
+            d.lock = "pending";
+            d.lockBase = d.dx; d.mv = 0;          // Chrome freezes clientX as soon as the lock is requested: count movementX from here
+            const fail = () => { if (drag === d && d.lock === "pending") { d.lock = "failed"; capture(d); } };
+            try {
+                const r = d.v.requestPointerLock();
+                if (r && typeof r.then === "function") r.catch(fail);
+            } catch (err) { fail(); }
+            setTimeout(fail, 1000);                                       // no answer: treat as refused
+        }
+        function capture(d) {        // (touch already has an implicit capture on the video: keep it)
+            try { if (!d.v.hasPointerCapture(d.id)) d.v.setPointerCapture(d.id); } catch (err) { /* pointer already gone */ }
+        }
+        document.addEventListener("pointerlockchange", () => {
+            if (!drag) return;
+            if (document.pointerLockElement === drag.v) { if (drag.lock === "pending") drag.lock = "on"; }
+            else if (drag.lock === "on") endDrag("lock lost");            // Esc / focus loss ended the lock
+        });
+        document.addEventListener("pointerlockerror", () => { if (drag && drag.lock === "pending") { drag.lock = "failed"; capture(drag); } });
+
         function onDragMove(e) {
             if (!drag || e.pointerId !== drag.id) return;
-            const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+            if (drag.active && e.buttons === 0 && e.pointerType === "mouse") { endDrag("no button"); return; }   // release was missed
+            if (drag.lock === "on" || drag.lock === "pending") { drag.mv += e.movementX || 0; drag.dx = drag.lockBase + drag.mv; }
+            else drag.dx = e.clientX - drag.x0;
+            const dx = drag.dx, dy = e.clientY - drag.y0;
             if (!drag.active) {
                 if (Math.abs(dy) >= DRAG_THRESHOLD && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }  // vertical: not ours
                 if (Math.abs(dx) < DRAG_THRESHOLD) return;
                 drag.active = true;
-                try { drag.v.setPointerCapture(drag.id); } catch (err) { /* pointer already gone */ }
-                drag.cursor = drag.v.style.cursor;
-                drag.v.style.cursor = "ew-resize";
+                if (CFG.drag_pointer_lock !== false && e.pointerType === "mouse" && drag.v.requestPointerLock) startLock(drag);
+                else capture(drag);
+                if (CFG.drag_hide_cursor !== false) hideCursor(drag.v);
                 if (!drag.v.paused) drag.v.pause();
             }
             e.preventDefault();
@@ -871,21 +923,30 @@
             const u = dragUnit(e);
             queueSteps(drag.v, n * u.frames, n * u.jumps);
         }
+        function endDrag(reason, swallow = true) {
+            const d = drag;
+            drag = null;
+            showCursor();                                                 // always, whatever state we are in
+            if (!d) return;
+            if (d.active) core.dragEndedAt = performance.now();           // a quick click after a scrub is not a double-click
+            if (d.active && swallow) {
+                if (d.button === 2) swallowMenuUntil = performance.now() + 600;   // no context menu after a right drag
+                else { swallowClickUntil = performance.now() + 400; swallowClickOn = d.v; }   // the click that follows must not toggle play
+            }
+            try { if (d.v.hasPointerCapture && d.v.hasPointerCapture(d.id)) d.v.releasePointerCapture(d.id); } catch (err) { /* ignore */ }
+            if (d.lock && document.pointerLockElement === d.v) { try { document.exitPointerLock(); } catch (err) { /* ignore */ } }
+        }
         function onDragEnd(e) {
             if (!drag || e.pointerId !== drag.id) return;
-            if (drag.active) {
-                if (drag.button === 2) swallowMenuUntil = performance.now() + 600;   // no context menu after a right drag
-                else swallowClickUntil = performance.now() + 400;        // the click that follows must not toggle play
-                drag.v.style.cursor = drag.cursor || "";
-                try { drag.v.releasePointerCapture(drag.id); } catch (err) { /* ignore */ }
-            }
-            drag = null;
+            endDrag(e.type);
         }
         function swallowClick(e) {
             if (!swallowClickUntil) return;
-            const late = performance.now() > swallowClickUntil;
-            swallowClickUntil = 0;
-            if (late) return;
+            const late = performance.now() > swallowClickUntil, on = swallowClickOn;
+            swallowClickUntil = 0; swallowClickOn = null;
+            // only the click that ends the drag (on the video / its player); with pointer lock there may be none
+            const block = on && (on.closest(".block") || on.parentElement || on);
+            if (late || !(e.target instanceof Node) || !(e.target === on || block.contains(e.target))) return;
             e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
         }
         const blockWhileDragging = e => { if (drag && drag.active) e.preventDefault(); };
@@ -900,7 +961,21 @@
         window.addEventListener("pointerdown", onDragDown, true);
         window.addEventListener("pointermove", onDragMove, { capture: true, passive: false });
         window.addEventListener("pointerup", onDragEnd, true);
-        window.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.id) { drag.active = false; onDragEnd(e); } }, true);
+        window.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.id) endDrag("pointercancel", false); }, true);
+        window.addEventListener("lostpointercapture", e => {
+            if (!drag || e.pointerId !== drag.id || !drag.active || drag.lock === "pending" || drag.lock === "on") return;
+            try { if (drag.v.hasPointerCapture(e.pointerId)) return; } catch (err) { /* ignore */ }   // capture moved to the video (implicit -> ours)
+            endDrag("lostpointercapture");
+        }, true);
+        window.addEventListener("keydown", e => {
+            if (e.key !== "Escape" || !drag) return;
+            const active = drag.active;
+            endDrag("escape");
+            if (active) { e.preventDefault(); e.stopPropagation(); }   // ends the scrub only (e.g. Gradio's gallery would close its preview)
+        }, true);
+        window.addEventListener("blur", () => endDrag("blur", false));
+        document.addEventListener("visibilitychange", () => { if (document.hidden) endDrag("hidden", false); });
+        document.addEventListener("fullscreenchange", () => { if (drag && drag.active) endDrag("fullscreenchange", false); });
         window.addEventListener("click", swallowClick, true);
         window.addEventListener("selectstart", blockWhileDragging, true);
         window.addEventListener("dragstart", blockWhileDragging, true);
@@ -924,6 +999,8 @@
             config: CFG,
             onSettings: markVideos,
             dragging: () => !!(drag && drag.active),
+            cursorHidden: () => hiddenOn.length > 0 || document.documentElement.classList.contains("vidosser-scrubbing"),
+            dragLock: () => drag ? drag.lock : null,
             info: v => { const i = core.getInfo(v), s = stepState(v); return { fps: i.fps, source: i.fpsSource, frames: i.frames, target: s.target }; },
             step: (v, n) => queueSteps(v, n | 0, 0),
             jump: (v, n) => queueSteps(v, 0, n | 0),
@@ -940,6 +1017,8 @@
         drag_pixels_per_frame: 8,
         drag_invert: false,           // false: drag right = forward
         drag_button: "left",          // "left" | "right"
+        drag_pointer_lock: true,      // Pointer Lock while scrubbing (Chrome shows its "press Esc" banner)
+        drag_hide_cursor: true,       // hide the cursor while scrubbing (fallback without pointer lock)
         jump_mode: "seconds",     // "seconds" | "frames"
         jump_seconds: 0.5,
         jump_frames: 8,
@@ -1180,26 +1259,159 @@
         };
         Object.defineProperty(HTMLVideoElement.prototype, "requestFullscreen", { value: ownRequest, configurable: true, writable: true });
 
-        // double-click on a native-controls video
-        let swallowDblUntil = 0;
+        // Double-click on a video: in fullscreen (our container, Gradio's gallery fullscreen or
+        // native <video>) -> exit; outside fullscreen -> container fullscreen (if enabled;
+        // otherwise the browser default). Handled on the 2nd mousedown (detail 2), still inside
+        // the user gesture; the native controls' own toggle is cancelled there. The two single
+        // clicks of a double-click toggle play twice: the play state from before the
+        // double-click is restored afterwards. A "double-click" made of the release of a
+        // drag-scrub and a quick click is ignored.
+        let swallowDblUntil = 0, firstPress = null, restoreTimer = 0;
+        function restorePlay() {
+            clearTimeout(restoreTimer);
+            const p = firstPress; firstPress = null;
+            if (!p || !p.v.isConnected) return;
+            if (p.v.paused !== p.paused) { if (p.paused) p.v.pause(); else p.v.play().catch(() => {}); }
+        }
         window.addEventListener("mousedown", e => {
-            if (e.button !== 0 || e.detail !== 2) return;
+            if (e.button !== 0) return;
             const v = e.target;
-            if (!(v instanceof HTMLVideoElement) || !v.controls || !enabled(v)) return;
+            if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
+            if (e.detail === 1) { firstPress = { v, paused: v.paused, t: performance.now() }; return; }
+            if (e.detail !== 2) return;
+            const fs = core.fsElement();
+            const inFs = !!(fs && (fs === v || fs.contains(v)));
+            const afterDrag = performance.now() - (core.dragEndedAt || 0) < 700;
+            if (!inFs && !afterDrag && !enabled(v)) return;               // container fullscreen off: browser default
             e.preventDefault(); e.stopPropagation();
             swallowDblUntil = performance.now() + 1000;
-            const fs = core.fsElement();
-            if (fs && (fs === v || fs.contains(v))) document.exitFullscreen().catch(() => {});
+            if (afterDrag) { firstPress = null; return; }                 // release of a scrub + click: not a double-click
+            if (inFs) document.exitFullscreen().catch(() => {});
             else enter(v).catch(() => {});
+            if (firstPress && firstPress.v === v) { clearTimeout(restoreTimer); restoreTimer = setTimeout(restorePlay, 600); }
         }, true);
         window.addEventListener("dblclick", e => {
-            if (performance.now() < swallowDblUntil && e.target instanceof HTMLVideoElement) { e.preventDefault(); e.stopPropagation(); }
+            if (performance.now() < swallowDblUntil && e.target instanceof HTMLVideoElement) {
+                e.preventDefault(); e.stopPropagation();
+                if (firstPress) setTimeout(restorePlay, 30);              // after the 2nd click's own toggle
+            }
         }, true);
         document.addEventListener("fullscreenchange", () => {
             const fs = core.fsElement();
             for (const el of document.querySelectorAll("." + CLS)) if (el !== fs) el.classList.remove(CLS);
         });
         return { config: GEN, containerFor, enter, nativeRequest };
+    })(core, V.config.general);
+
+    // =======================================================================
+    // MODULE controls - hide the video control bars (general.hide_controls)
+    // =======================================================================
+    // "fullscreen" (default): while a video is fullscreen (container or native) its native
+    // controls attribute is removed and Gradio's own player bar (.controls) is hidden;
+    // restored on exit. "always": native controls removed everywhere (Gradio's bar below
+    // the gr.Video player, which does not cover the picture, is only hidden in fullscreen).
+    // Without native controls, a click on the video and the Space bar play / pause (the
+    // drag-scrub click swallowing still applies), the whole picture is draggable, and a
+    // thin non-interactive 3 px progress line is drawn at the picture's bottom edge
+    // (show_thin_progress; not possible in native fullscreen, where nothing can be drawn).
+    V.modules.controls = (function (core, GEN) {
+        const FLAG = "vidosserControls", HIDECLS = "vidosser-hide-controls";
+        const style = document.createElement("style");
+        // Chrome shows its own controls on a natively fullscreen <video> even without the
+        // controls attribute: hide those shadow parts too on the videos we manage.
+        style.textContent = `.${HIDECLS} .controls{display:none!important}` +
+            `video.vidosser-nocontrols::-webkit-media-controls,video.vidosser-nocontrols::-webkit-media-controls-enclosure,` +
+            `video.vidosser-nocontrols::-webkit-media-controls-panel,video.vidosser-nocontrols::-webkit-media-controls-overlay-enclosure{display:none!important}`;
+        (document.head || document.documentElement).appendChild(style);
+        const mode = () => { const m = String(GEN.hide_controls || "fullscreen").toLowerCase(); return m === "off" || m === "always" ? m : "fullscreen"; };
+        const inFs = v => { const fs = core.fsElement(); return !!(fs && (fs === v || fs.contains(v))); };
+        const hiddenByUs = v => !!(v && v.dataset && v.dataset[FLAG]);
+        let applying = false;
+
+        function apply() {
+            applying = true;
+            try {
+                const m = mode(), fs = core.fsElement();
+                for (const v of document.querySelectorAll("video")) {
+                    if (v.closest(".thumbnail-item")) continue;
+                    const hide = m === "always" || (m === "fullscreen" && inFs(v));
+                    if (hide && v.controls) { v.dataset[FLAG] = "1"; v.controls = false; }
+                    else if (!hide && hiddenByUs(v)) { delete v.dataset[FLAG]; v.controls = true; }
+                    v.classList.toggle("vidosser-nocontrols", hiddenByUs(v));
+                }
+                // Gradio player bars inside the fullscreen element
+                document.querySelectorAll("." + HIDECLS).forEach(el => { if (el !== fs || m === "off") el.classList.remove(HIDECLS); });
+                if (fs && m !== "off" && !(fs instanceof HTMLVideoElement)) fs.classList.add(HIDECLS);
+            } finally { applying = false; }
+            drawAll();
+        }
+        let queued = false;
+        const schedule = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; apply(); }); };
+        new MutationObserver(muts => {
+            if (applying) return;
+            for (const mu of muts) {
+                if (mu.type === "childList" || (mu.type === "attributes" && mu.target instanceof HTMLVideoElement)) { schedule(); return; }
+            }
+        }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["controls"] });
+        document.addEventListener("fullscreenchange", apply);
+        document.addEventListener("webkitfullscreenchange", apply);
+
+        // play / pause without native controls (bubble phase: the drag-scrub click swallowing runs first)
+        const toggle = v => { if (v.paused) v.play().catch(() => {}); else v.pause(); core.touch(v); };
+        window.addEventListener("click", e => {
+            const v = e.target;
+            if (e.button !== 0 || !(v instanceof HTMLVideoElement) || !hiddenByUs(v) || e.defaultPrevented) return;
+            toggle(v);
+        });
+        window.addEventListener("keydown", e => {
+            if (e.key !== " " || e.ctrlKey || e.altKey || e.metaKey || e.repeat || core.typingOrModal(e)) return;
+            const v = core.videoForKeyboard();
+            if (!v || !(hiddenByUs(v) || inFs(v))) return;
+            e.preventDefault(); e.stopPropagation();
+            toggle(v);
+        }, true);
+
+        // thin progress line
+        const bars = new Map();
+        function pictureRect(v) {
+            const r = v.getBoundingClientRect();
+            let x = r.left, y = r.top, w = r.width, h = r.height;
+            if (v.videoWidth && v.videoHeight) {
+                const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+                w = v.videoWidth * k; h = v.videoHeight * k; x += (r.width - w) / 2; y += (r.height - h) / 2;
+            }
+            return { x, y, w, h };
+        }
+        const wants = v => GEN.show_thin_progress !== false && mode() !== "off" && v.isConnected && core.isVisible(v) &&
+                           core.fsElement() !== v && (hiddenByUs(v) || (inFs(v) && !v.controls));
+        function draw(v) {
+            let bar = bars.get(v);
+            if (!wants(v)) { if (bar) { bar.remove(); bars.delete(v); } return; }
+            if (!bar) {
+                bar = document.createElement("div");
+                bar.className = "vidosser-thin-progress";
+                bar.style.cssText = "position:fixed;height:3px;z-index:2147483644;pointer-events:none;background:rgba(255,255,255,.18);";
+                bar.innerHTML = '<div class="vidosser-thin-fill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(255,255,255,.85);"></div>';
+                bars.set(v, bar);
+            }
+            const host = core.fsElement() || document.body;
+            if (bar.parentNode !== host) host.appendChild(bar);
+            const p = pictureRect(v), d = v.duration;
+            Object.assign(bar.style, { left: Math.round(p.x) + "px", top: Math.round(p.y + p.h - 3) + "px", width: Math.round(p.w) + "px" });
+            bar.firstChild.style.width = (Number.isFinite(d) && d > 0 ? Math.min(100, v.currentTime / d * 100) : 0) + "%";
+        }
+        function drawAll() {
+            for (const v of bars.keys()) if (!v.isConnected) { bars.get(v).remove(); bars.delete(v); }
+            document.querySelectorAll("video").forEach(v => { if (bars.has(v) || hiddenByUs(v) || inFs(v)) draw(v); });
+        }
+        let raf = 0;
+        const loop = () => { raf = 0; drawAll(); if (bars.size) raf = requestAnimationFrame(loop); };
+        const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
+        for (const t of ["timeupdate", "seeked", "play", "loadedmetadata"]) document.addEventListener(t, kick, true);
+        window.addEventListener("scroll", kick, true);
+        window.addEventListener("resize", kick);
+        apply();
+        return { config: GEN, apply, onSettings: apply, hidden: hiddenByUs };
     })(core, V.config.general);
 
     // =======================================================================
@@ -1351,8 +1563,8 @@
             if (!bar) {
                 bar = document.createElement("div");
                 bar.className = "vidosser-loop-bar";
-                bar.style.cssText = "position:fixed;height:6px;z-index:2147483645;pointer-events:none;background:rgba(255,255,255,.18);border-radius:3px;";
-                bar.innerHTML = '<div class="vidosser-loop-seg" style="position:absolute;top:0;bottom:0;background:#ffb000;border-radius:3px;box-shadow:0 0 6px #ffb000;"></div>';
+                bar.style.cssText = "position:fixed;height:3px;z-index:2147483645;pointer-events:none;background:rgba(255,255,255,.15);";
+                bar.innerHTML = '<div class="vidosser-loop-seg" style="position:absolute;top:0;bottom:0;background:#ffb000;"></div>';
                 bars.set(v, bar);
             }
             const host = fs || document.body;
@@ -1369,7 +1581,7 @@
             seg.style.left = (a / total * 100) + "%";
             seg.style.width = Math.max(0.6, (b + 1 - a) / total * 100) + "%";
             seg.dataset.in = s.in === null ? "" : s.in; seg.dataset.out = s.out === null ? "" : s.out;
-            Object.assign(bar.style, { display: "block", left: Math.round(x) + "px", top: Math.round(y + h - 8) + "px", width: Math.round(w) + "px" });
+            Object.assign(bar.style, { display: "block", left: Math.round(x) + "px", top: Math.ceil(y) + "px", width: Math.round(w) + "px" });   // thin line on the picture's top edge
         }
         const redrawAll = () => { for (const v of [...bars.keys()]) { if (!v.isConnected) { bars.get(v).remove(); bars.delete(v); } else drawBar(v); } };
         window.addEventListener("scroll", redrawAll, { capture: true, passive: true });

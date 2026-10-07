@@ -15,10 +15,11 @@ Con la rueda del ratón:
 
 Arrastrando sobre el vídeo:
 - **Mantén pulsado el botón izquierdo (o el derecho, según «Botón para arrastrar») sobre un vídeo y arrastra en horizontal**: cada 8 píxeles = 1 fotograma (configurable); a la derecha = adelante, a la izquierda = atrás. La cuenta va por posición y es exacta: si vuelves al punto de partida, vuelves al mismo fotograma.
-- Empieza solo tras 4 píxeles de movimiento sobre todo horizontal, así que **un clic normal sigue pausando / reproduciendo**. Si el vídeo se está reproduciendo, se pausa al empezar a arrastrar, y el clic del final del arrastre no lo vuelve a poner en marcha. Con el **botón derecho**, un clic derecho normal sigue abriendo el menú contextual; el menú solo se bloquea si de verdad has arrastrado. Sigue funcionando aunque el ratón salga del vídeo.
+- Empieza solo tras 4 píxeles de movimiento sobre todo horizontal, así que **un clic normal sigue pausando / reproduciendo**. Si el vídeo se está reproduciendo, se pausa al empezar a arrastrar, y el clic del final del arrastre no lo vuelve a poner en marcha. Con el **botón derecho**, un clic derecho normal sigue abriendo el menú contextual; el menú solo se bloquea si de verdad has arrastrado.
+- Mientras arrastras, el ratón queda **bloqueado y oculto** (Pointer Lock, «Bloquear el puntero al arrastrar», activado por defecto): el puntero no choca con el borde de la pantalla, así que puedes seguir avanzando en un solo movimiento largo, y al soltar reaparece donde estaba. Chrome/Edge muestran cada vez arriba su aviso «Pulsa Esc para mostrar el cursor»: es un aviso de seguridad del navegador y desaparece solo. El bloqueo se suelta siempre al soltar el botón, al pulsar **Esc** o al cambiar de ventana. Si el bloqueo está desactivado o el navegador lo rechaza, el arrastre sigue funcionando aunque el ratón salga del vídeo y el cursor solo se oculta mientras arrastras («Ocultar el cursor mientras arrastras», activado por defecto); vuelve siempre al soltar, con Esc, si se cancela o si la ventana pierde el foco.
 - **Shift + arrastrar** = 10 fotogramas por paso; **Ctrl + arrastrar** (el modificador del salto corto) = un salto corto por paso.
 - Funciona dentro y fuera de la pantalla completa (no depende de «Rueda solo a pantalla completa») y con el dedo en pantallas táctiles (deslizar en horizontal; en vertical sigue desplazando la página).
-- No actúa sobre la barra de controles nativa del vídeo (los 40 px de abajo de un vídeo con controles del navegador), las miniaturas de la galería, los cuadros de texto ni nada que no sea la imagen del vídeo.
+- No actúa sobre la barra de controles nativa del vídeo (los 40 px de abajo de un vídeo mientras se ven sus controles; si Vidosser oculta los controles, se puede arrastrar sobre toda la imagen), las miniaturas de la galería, los cuadros de texto ni nada que no sea la imagen del vídeo.
 
 Con el teclado (teclas configurables en la pestaña **Vidosser**):
 - **A = fotograma anterior**, **S = fotograma siguiente** (1 fotograma por pulsación; si mantienes la tecla, sigue avanzando fotograma a fotograma).
@@ -47,25 +48,33 @@ En general:
 
 ## Pantalla completa con indicadores (`container_fullscreen`)
 
-El navegador no deja dibujar nada encima de un `<video>` en pantalla completa nativa. Por eso, al hacer **doble clic en un vídeo** o al usar el **botón de pantalla completa del reproductor de WanGP**, Vidosser pone a pantalla completa la caja del reproductor en lugar del vídeo: se ve igual, pero se ven el indicador de fotograma, los mensajes de guardado y la barra del bucle. Para salir, Esc o doble clic otra vez. Activado por defecto («Pantalla completa del vídeo con indicadores y mensajes»).
+El navegador no deja dibujar nada encima de un `<video>` en pantalla completa nativa. Por eso, al hacer **doble clic en un vídeo** o al usar el **botón de pantalla completa del reproductor de WanGP**, Vidosser pone a pantalla completa la caja del reproductor en lugar del vídeo: se ve igual, pero se ven el indicador de fotograma, los mensajes de guardado y la barra del bucle. Activado por defecto («Pantalla completa del vídeo con indicadores y mensajes»).
+
+**El doble clic alterna**: fuera de la pantalla completa entra; dentro (la de Vidosser o la nativa del vídeo) sale. Esc también sale. Los dos clics del doble clic no cambian la reproducción: un vídeo pausado sigue pausado y uno en marcha sigue en marcha. Un doble clic justo después de arrastrar se ignora, y un arrastre nunca se come el doble clic siguiente.
 
 El botón de pantalla completa **de la barra de controles propia del navegador** no se puede interceptar desde una página web, así que sigue siendo nativo; ahí el guardado se confirma con el sonido.
+
+## Ocultar la barra de controles (`hide_controls`)
+
+- «Ocultar la barra de controles del vídeo»: **No**, **Solo a pantalla completa** (por defecto) o **Siempre**. Se ocultan los controles propios del navegador del `<video>` (también en la pantalla completa nativa) y, a pantalla completa, la barra del reproductor de WanGP; vuelven al salir de la pantalla completa o al desactivar la opción.
+- Sin barra: **clic** sobre el vídeo o **Espacio** = reproducir / pausar, y se puede arrastrar sobre **toda la imagen** para pasar fotogramas (sin la zona de 40 px).
+- «Barra de progreso fina (3 px)» (`show_thin_progress`, activada por defecto): una línea de 3 px, que no se puede pulsar, en el borde inferior de la imagen indica la posición mientras los controles están ocultos.
 
 ## Bucle (`loop`)
 
 - **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (desactivado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
 - **Segmento A-B**: **I** marca el inicio y **O** el final en el fotograma actual. Al reproducir se repiten exactamente los fotogramas del inicio al final (exacto al fotograma, con `requestVideoFrameCallback`), también si el final es el último fotograma. Si marcas el final antes que el inicio, se intercambian; si mueves un extremo de un segmento ya completo más allá del otro, empieza un segmento nuevo. **U** borra el segmento. Si das al play fuera del segmento, empieza en el inicio. Los pasos de fotograma (rueda y teclas) no se limitan al segmento.
-- El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una barra naranja sobre el borde inferior del vídeo indica dónde está el segmento dentro del clip. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
+- El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una línea naranja fina (3 px) en el borde superior de la imagen indica dónde está el segmento dentro del clip, así que no tapa la parte de abajo. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
 
 ## Pestaña de ajustes «Vidosser»
 
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
-- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar e invertir sentido al arrastrar.
+- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar y ocultar el cursor mientras arrastras.
 - **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
 - **Bucle**: repetir todos los vídeos en bucle.
 - **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
-- **Indicador y pantalla completa**: mostrar el indicador, pantalla completa con indicadores y mensajes, y los fps que se usan si no se pueden detectar.
+- **Indicador y pantalla completa**: mostrar el indicador, pantalla completa con indicadores y mensajes, ocultar la barra de controles del vídeo, barra de progreso fina y los fps que se usan si no se pueden detectar.
 
 Al pulsar **Guardar ajustes** se comprueban los valores (teclas repetidas, números, carpeta), se guardan en `settings.json` dentro de la carpeta del plugin y **se aplican al momento, sin reiniciar WanGP**. Si tienes WanGP abierto en otras pestañas del navegador, recárgalas para que usen los nuevos ajustes. Si algo no es válido, no se guarda nada y se explica el motivo.
 
@@ -111,6 +120,8 @@ Sección `general` (común a todas las herramientas):
 | `show_overlay` | true | mostrar el indicador sobre el vídeo |
 | `overlay_ms` | 1200 | tiempo visible del indicador (ms) |
 | `container_fullscreen` | true | doble clic / botón del reproductor de WanGP = pantalla completa con indicadores y mensajes |
+| `hide_controls` | `"fullscreen"` | ocultar la barra de controles: `"off"` (nunca), `"fullscreen"` (solo a pantalla completa) o `"always"` (siempre) |
+| `show_thin_progress` | true | línea de progreso de 3 px abajo cuando los controles están ocultos |
 
 Sección `keys` (una tecla por acción, sin distinguir mayúsculas; no actúan con Ctrl, Alt o Cmd):
 
@@ -137,10 +148,12 @@ Sección `frame_step`:
 | `wheel_jump_modifier` | `"ctrl"` | modificador + rueda = salto corto: `"ctrl"`, `"alt"`, `"shift"`, `"meta"` o `"none"` |
 | `shift_frames` | 10 | fotogramas por muesca con Shift |
 | `invert_direction` | false | `true` = rueda arriba avanza |
-| `drag_scrub` | true | arrastrar sobre el vídeo con el botón izquierdo = pasar fotogramas |
+| `drag_scrub` | true | arrastrar sobre el vídeo = pasar fotogramas |
 | `drag_pixels_per_frame` | 8 | píxeles de arrastre por fotograma (1-200) |
 | `drag_invert` | false | `true` = arrastrar a la derecha retrocede |
 | `drag_button` | `"left"` | `"left"` (izquierdo) o `"right"` (derecho) |
+| `drag_pointer_lock` | true | bloquear el puntero al arrastrar (Chrome muestra «Pulsa Esc para mostrar el cursor») |
+| `drag_hide_cursor` | true | ocultar el cursor mientras arrastras (si el bloqueo está desactivado o falla) |
 | `jump_mode` | `"seconds"` | `"seconds"` (usa `jump_seconds`) o `"frames"` (usa `jump_frames`) |
 | `jump_seconds` | 0.5 | salto en segundos (se redondea al fotograma más cercano) |
 | `jump_frames` | 8 | salto en fotogramas (si `jump_mode` es `"frames"`) |
@@ -170,10 +183,11 @@ Sección `save_frame`:
 
 ## Limitaciones
 
-- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: no se ven el indicador, los mensajes, el destello ni la barra del bucle; el guardado se confirma con el sonido. Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
+- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: no se ven el indicador, los mensajes, el destello, la barra de progreso fina ni la del bucle; el guardado se confirma con el sonido. Chrome siempre muestra sus controles en un vídeo a pantalla completa nativa, así que Vidosser los oculta ahí con CSS (si «Ocultar la barra de controles» no está en «No»). Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
 - El bucle A-B vuelve al inicio justo antes de que se vea el fotograma siguiente al final. Es exacto al fotograma en Chrome/Edge (probado a 16 y 24 fps); con el equipo muy cargado o en navegadores sin `requestVideoFrameCallback` puede colarse algún fotograma de más antes de volver.
-- El arrastre para pasar fotogramas usa el botón izquierdo sobre la imagen del vídeo; la barra de progreso nativa funciona como siempre. En pantallas táctiles se ha probado con táctil emulado en Chrome, no en un móvil o tableta real.
+- El arrastre para pasar fotogramas usa el botón elegido sobre la imagen del vídeo; la barra de progreso nativa funciona como siempre. En pantallas táctiles se ha probado con táctil emulado en Chrome, no en un móvil o tableta real.
 - Arrastrar con el botón derecho: en **Windows** el menú contextual se abre al soltar, así que tras un arrastre simplemente no aparece. En **macOS y Linux** el navegador abre el menú nada más pulsar el botón derecho, así que ahí normalmente no se puede arrastrar con él: usa el izquierdo.
+- Bloqueo del puntero: Chrome/Edge muestran el aviso «Pulsa Esc para mostrar el cursor» cada vez que un arrastre activa el bloqueo, y una página no lo puede quitar. Si te molesta, desactiva «Bloquear el puntero al arrastrar» (el cursor solo se oculta y el arrastre se para en el borde de la pantalla).
 - Los segmentos del bucle solo se guardan mientras la página está abierta.
 - Si eliges «Ninguno» como modificador del salto corto, Ctrl + rueda hace zoom en el navegador como siempre.
 - El clic central guarda al soltar el botón. Si lo mantienes pulsado más de unos 5 segundos en modo «Preguntar», el navegador ya no deja abrir el diálogo y el fotograma se descarga como una descarga normal.
