@@ -92,7 +92,7 @@ DEFAULT_SETTINGS = {
     },
     "loop": {
         "enabled": True,
-        "loop_all": False,          # every video plays in loop
+        "loop_all": True,           # every video plays in loop
     },
     "save_frame": {
         "enabled": True,
@@ -425,7 +425,7 @@ class VidosserPlugin(WAN2GPPlugin):
     def _apply_ui_values(self, key_values, keys_enabled=True, wheel_enabled=True, invert=False, shift_frames=10,
                          jump_mode="seconds", jump_seconds=0.5, jump_frames=8, sf_format="png", jpg_quality=95, sf_mode="ask",
                          folder="", show_overlay=True, default_fps=16, middle_click=True, wheel_fs_only=True, jump_modifier="ctrl",
-                         toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=False,
+                         toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=True,
                          drag_scrub=True, drag_ppf=8, drag_invert=False, drag_button="left",
                          drag_hide_cursor=True, drag_pointer_lock=True,
                          hide_controls="fullscreen", thin_progress=True):

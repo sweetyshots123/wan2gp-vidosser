@@ -1597,7 +1597,7 @@
         };
     })(core, V.config.loop = Object.assign({
         enabled: true,
-        loop_all: false,          // every <video> plays in loop
+        loop_all: true,           // every <video> plays in loop
     }, SETTINGS.loop || {}));
 
     // =======================================================================

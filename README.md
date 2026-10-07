@@ -39,7 +39,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - *Barra de progreso fina* (*thin progress bar*, `show_thin_progress`, on by default): a 3 px, non-clickable line at the very bottom of the picture shows the position while the controls are hidden.
 
 **Loop**
-- **L** turns looping on/off for the current video. *Repetir todos los vídeos en bucle* (*loop all videos*, off by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
+- **L** turns looping on/off for the current video. *Repetir todos los vídeos en bucle* (*loop all videos*, on by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
 - **A-B segment**: **I** marks the start (in) and **O** the end (out) at the current frame; playback then repeats exactly frames in…out (frame-accurate, using `requestVideoFrameCallback`), also when out is the last frame. Marking out before in swaps them; moving one end past the other end of an existing segment starts a new segment. **U** clears the segment. Pressing play outside the segment starts at in. Frame stepping is never restricted to the segment.
 - Segments are per video (by file) and kept while the page is open. A thin (3 px) orange line on the top edge of the picture shows the segment's position in the clip, so nothing covers the bottom of the picture. Messages confirm each action: *Inicio de bucle: frame N*, *Final de bucle: frame N*, *Bucle borrado*.
 
@@ -95,7 +95,7 @@ Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes*
 | | *Salto corto: segundos* (seconds) | 0.5 | rounded to whole frames |
 | | *Salto corto: fotogramas* (frames) | 8 | |
 | | *Modificador + rueda = salto corto* (modifier) | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *Ninguno* (none = off). With Shift, Shift + wheel does the short jump instead of the ×10 multiplier (the tab shows a note) |
-| **Bucle** (Loop) | *Repetir todos los vídeos en bucle* (loop all videos) | off | applied live, also to videos added later |
+| **Bucle** (Loop) | *Repetir todos los vídeos en bucle* (loop all videos) | on | applied live, also to videos added later |
 | **Guardar fotograma** (Save frame) | *Formato* (format) | PNG | PNG or JPG |
 | | *Calidad JPG* (JPG quality) | 95 | 1–100 |
 | | *Modo* (mode) | ask | *Preguntar dónde guardar* (ask) or *Guardar directamente en la carpeta* (direct) |
@@ -124,7 +124,7 @@ Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes*
                   "shift_frames": 10, "invert_direction": false,
                   "drag_scrub": true, "drag_pixels_per_frame": 8, "drag_invert": false, "drag_button": "left",
                   "drag_pointer_lock": true, "drag_hide_cursor": true, "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
-  "loop":       { "enabled": true, "loop_all": false },
+  "loop":       { "enabled": true, "loop_all": true },
   "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true,
                   "toast": true, "toast_ms": 2500, "flash": true, "sound": true, "sound_volume": 60 }
 }

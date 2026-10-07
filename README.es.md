@@ -62,7 +62,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 ## Bucle (`loop`)
 
-- **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (desactivado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
+- **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (activado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
 - **Segmento A-B**: **I** marca el inicio y **O** el final en el fotograma actual. Al reproducir se repiten exactamente los fotogramas del inicio al final (exacto al fotograma, con `requestVideoFrameCallback`), también si el final es el último fotograma. Si marcas el final antes que el inicio, se intercambian; si mueves un extremo de un segmento ya completo más allá del otro, empieza un segmento nuevo. **U** borra el segmento. Si das al play fuera del segmento, empieza en el inicio. Los pasos de fotograma (rueda y teclas) no se limitan al segmento.
 - El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una línea naranja fina (3 px) en el borde superior de la imagen indica dónde está el segmento dentro del clip, así que no tapa la parte de abajo. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
 
@@ -163,7 +163,7 @@ Sección `loop`:
 | opción | por defecto | significado |
 |---|---|---|
 | `enabled` | true | activar/desactivar esta herramienta |
-| `loop_all` | false | todos los vídeos en bucle |
+| `loop_all` | true | todos los vídeos en bucle |
 
 Sección `save_frame`:
 
