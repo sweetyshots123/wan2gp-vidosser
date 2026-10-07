@@ -3,7 +3,8 @@
 Current tools (modules):
   * frame_step: step video frames with the mouse wheel (one notch = one frame,
     Shift + wheel = 10 frames, Ctrl + wheel = one short jump per notch; by default
-    only while fullscreen) or the keyboard (S / A = next / previous frame,
+    only while fullscreen), by dragging on the video with the left button (8 px =
+    one frame) or with the keyboard (S / A = next / previous frame,
     W / Q = jump forward / back), also in fullscreen.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
     loop (frame accurate), U = clear the segment.
@@ -75,6 +76,10 @@ DEFAULT_SETTINGS = {
                                         # "ctrl" | "alt" | "shift" | "meta" | "none"
         "shift_frames": 10,         # frames per notch while Shift is held
         "invert_direction": False,  # False: wheel down = next frame, wheel up = previous frame
+        "drag_scrub": True,         # hold the left button on a video and drag horizontally = step frames
+        "drag_pixels_per_frame": 8, # horizontal pixels per frame while dragging (1..200)
+        "drag_invert": False,       # False: drag right = forward, drag left = backward
+        "drag_button": "left",      # "left" | "right" (right: the context menu opens only for a plain right click)
         "jump_mode": "seconds",     # "seconds": jump_seconds converted with the video fps, "frames": jump_frames
         "jump_seconds": 0.5,
         "jump_frames": 8,
@@ -101,7 +106,9 @@ DEFAULT_SETTINGS = {
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("save_frame", "format"): ("png", "jpg"),
             ("save_frame", "mode"): ("ask", "direct"),
-            ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none")}
+            ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
+            ("frame_step", "drag_button"): ("left", "right")}
+DRAG_BUTTON_CHOICES = [("Izquierdo", "left"), ("Derecho", "right")]
 JUMP_MODIFIER_CHOICES = [("Ctrl", "ctrl"), ("Alt", "alt"), ("Shift", "shift"), ("Meta (Cmd / Win)", "meta"), ("Ninguno", "none")]
 _ALLOW_EMPTY = {("save_frame", "folder")}
 
@@ -154,6 +161,7 @@ def load_settings(path=None):
     settings["save_frame"]["jpg_quality"] = max(1, min(100, settings["save_frame"]["jpg_quality"]))
     settings["save_frame"]["sound_volume"] = max(1, min(100, settings["save_frame"]["sound_volume"]))
     settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
+    settings["frame_step"]["drag_pixels_per_frame"] = max(1, min(200, settings["frame_step"]["drag_pixels_per_frame"]))
     _resolve_new_key_conflicts(settings["keys"], {a for a, _l in KEY_ACTIONS if a in user_keys})
     return settings
 
@@ -303,6 +311,17 @@ class VidosserPlugin(WAN2GPPlugin):
                                             value=current("frame_step", "wheel_fullscreen_only"), elem_id="vidosser_wheel_fullscreen_only")
                 invert = gr.Checkbox(label="Invertir sentido de la rueda", value=current("frame_step", "invert_direction"), elem_id="vidosser_invert")
                 shift_frames = gr.Number(label="Fotogramas con Shift + rueda", value=current("frame_step", "shift_frames"), precision=0, minimum=1, elem_id="vidosser_shift_frames")
+            with gr.Row():
+                drag_scrub = gr.Checkbox(label="Arrastrar sobre el vídeo = pasar fotogramas", value=current("frame_step", "drag_scrub"),
+                                         elem_id="vidosser_drag_scrub",
+                                         info="Derecha = adelante, izquierda = atrás. Un clic sin arrastrar hace lo de siempre (izquierdo: pausa / reproduce; "
+                                              "derecho: menú contextual). Shift = ×«Fotogramas con Shift», el modificador del salto corto = saltos cortos. "
+                                              "Funciona también fuera de la pantalla completa.")
+                drag_button = gr.Dropdown(label="Botón para arrastrar", choices=DRAG_BUTTON_CHOICES, value=current("frame_step", "drag_button"),
+                                          elem_id="vidosser_drag_button")
+                drag_ppf = gr.Number(label="Píxeles por fotograma al arrastrar", value=current("frame_step", "drag_pixels_per_frame"), precision=0,
+                                     minimum=1, maximum=200, elem_id="vidosser_drag_pixels_per_frame")
+                drag_invert = gr.Checkbox(label="Invertir sentido al arrastrar", value=current("frame_step", "drag_invert"), elem_id="vidosser_drag_invert")
         with gr.Group():
             gr.Markdown("### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido.")
             with gr.Row():
@@ -360,7 +379,7 @@ class VidosserPlugin(WAN2GPPlugin):
 
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
-                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all]
+                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button]
         save_btn.click(fn=self._save_from_ui, inputs=inputs, outputs=[status, settings_json], show_progress="hidden").then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
         check_btn.click(fn=self._check_folder_ui, inputs=[folder], outputs=[folder_status], show_progress="hidden")
@@ -373,7 +392,7 @@ class VidosserPlugin(WAN2GPPlugin):
 
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
-                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all")
+                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, then the fields of _UI_FIELDS (same order as `inputs`)."""
@@ -384,7 +403,8 @@ class VidosserPlugin(WAN2GPPlugin):
     def _apply_ui_values(self, key_values, keys_enabled=True, wheel_enabled=True, invert=False, shift_frames=10,
                          jump_mode="seconds", jump_seconds=0.5, jump_frames=8, sf_format="png", jpg_quality=95, sf_mode="ask",
                          folder="", show_overlay=True, default_fps=16, middle_click=True, wheel_fs_only=True, jump_modifier="ctrl",
-                         toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=False):
+                         toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=False,
+                         drag_scrub=True, drag_ppf=8, drag_invert=False, drag_button="left"):
         settings = load_settings()
         keys, errors = validate_keys(key_values)
         def number(value, label, minimum, maximum, integer):
@@ -403,6 +423,7 @@ class VidosserPlugin(WAN2GPPlugin):
         default_fps = number(default_fps, "FPS si no se pueden detectar", 1, 1000, False)
         toast_s = number(toast_s, "Duración del mensaje (segundos)", 0.5, 30, False)
         sound_volume = number(sound_volume, "Volumen", 1, 100, True)
+        drag_ppf = number(drag_ppf, "Píxeles por fotograma al arrastrar", 1, 200, True)
         folder = str(folder or "").strip().strip('"')
         if sf_mode == "direct" or folder:
             ok, path, message = self.check_folder(folder, create=sf_mode == "direct")
@@ -411,6 +432,9 @@ class VidosserPlugin(WAN2GPPlugin):
         jump_modifier = str(jump_modifier or "none").lower()
         if jump_modifier not in _CHOICES[("frame_step", "wheel_jump_modifier")]:
             errors.append("«Modificador + rueda = salto corto»: valor no válido.")
+        drag_button = str(drag_button or "left").lower()
+        if drag_button not in ("left", "right"):
+            errors.append("«Botón para arrastrar»: valor no válido.")
         if errors:
             return "❌ No se ha guardado:\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
@@ -418,7 +442,8 @@ class VidosserPlugin(WAN2GPPlugin):
         if jump_modifier == "shift":
             notes.append(f"Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y "
                          f"los «Fotogramas con Shift + rueda» ({shift_frames}) no se usan.")
-        settings["frame_step"].update(wheel_jump_modifier=jump_modifier)
+        settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
+                                      drag_invert=bool(drag_invert), drag_button=drag_button)
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)

@@ -812,8 +812,118 @@
 
         window.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
+        // ------------------------------------------------------- drag to scrub
+        // Left button (drag_button "left", default) or right button ("right"), or a finger,
+        // held on a video and moved horizontally: every
+        // drag_pixels_per_frame px = 1 frame (right = forward). Position based: the frame
+        // count is trunc(total dx / px), emitted as deltas into the same exact seek queue,
+        // so moving back and forth never drifts. Starts only after DRAG_THRESHOLD px of
+        // mostly-horizontal movement, so a plain click still toggles play/pause; after a
+        // drag the following click is swallowed. Right button: the context menu is blocked
+        // only when a drag happened (Windows opens it on release, after the drag); a plain
+        // right click keeps the normal menu. (macOS / Linux open the menu on press, so a
+        // right-button drag is only possible there if the menu does not take the pointer.) Shift = shift_frames per step, the wheel
+        // jump modifier = one short jump per step. Not used on the native control bar
+        // (bottom CONTROLS_PX of a <video controls>), thumbnails or anything that is not
+        // the video itself. Independent of wheel_fullscreen_only.
+        const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
+        let drag = null, swallowClickUntil = 0, swallowMenuUntil = 0;
+        const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
+        function dragUnit(e) {
+            const jm = jumpModifier();
+            if (jm && e[MODIFIERS[jm]]) return { frames: 0, jumps: 1 };
+            if (e.shiftKey) return { frames: Math.max(1, Math.round(CFG.shift_frames)), jumps: 0 };
+            return { frames: 1, jumps: 0 };
+        }
+        function onDragDown(e) {
+            if (CFG.enabled === false || CFG.drag_scrub === false || drag) return;
+            if (!e.isPrimary || (e.pointerType === "pen" && e.pressure === 0)) return;
+            const button = e.pointerType === "touch" ? 0 : dragButton();     // a finger always scrubs
+            if (e.button !== button) return;
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
+            const jm = jumpModifier();
+            if ((e.altKey && jm !== "alt") || (e.metaKey && jm !== "meta") || (e.ctrlKey && jm !== "ctrl")) return;
+            if (v.controls) {                                            // native control bar / progress bar
+                const r = v.getBoundingClientRect();
+                if (e.clientY > r.bottom - CONTROLS_PX) return;
+            }
+            drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, active: false, done: 0, type: e.pointerType, button };
+        }
+        function onDragMove(e) {
+            if (!drag || e.pointerId !== drag.id) return;
+            const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+            if (!drag.active) {
+                if (Math.abs(dy) >= DRAG_THRESHOLD && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }  // vertical: not ours
+                if (Math.abs(dx) < DRAG_THRESHOLD) return;
+                drag.active = true;
+                try { drag.v.setPointerCapture(drag.id); } catch (err) { /* pointer already gone */ }
+                drag.cursor = drag.v.style.cursor;
+                drag.v.style.cursor = "ew-resize";
+                if (!drag.v.paused) drag.v.pause();
+            }
+            e.preventDefault();
+            const ppf = Math.max(1, Number(CFG.drag_pixels_per_frame) || 8);
+            let want = Math.trunc((CFG.drag_invert ? -dx : dx) / ppf);
+            const n = want - drag.done;
+            if (!n) return;
+            drag.done = want;
+            const u = dragUnit(e);
+            queueSteps(drag.v, n * u.frames, n * u.jumps);
+        }
+        function onDragEnd(e) {
+            if (!drag || e.pointerId !== drag.id) return;
+            if (drag.active) {
+                if (drag.button === 2) swallowMenuUntil = performance.now() + 600;   // no context menu after a right drag
+                else swallowClickUntil = performance.now() + 400;        // the click that follows must not toggle play
+                drag.v.style.cursor = drag.cursor || "";
+                try { drag.v.releasePointerCapture(drag.id); } catch (err) { /* ignore */ }
+            }
+            drag = null;
+        }
+        function swallowClick(e) {
+            if (!swallowClickUntil) return;
+            const late = performance.now() > swallowClickUntil;
+            swallowClickUntil = 0;
+            if (late) return;
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }
+        const blockWhileDragging = e => { if (drag && drag.active) e.preventDefault(); };
+        function onContextMenu(e) {
+            const recent = swallowMenuUntil && performance.now() <= swallowMenuUntil;
+            if ((drag && drag.active && drag.button === 2) || recent) {
+                swallowMenuUntil = 0;
+                e.preventDefault(); e.stopPropagation();
+            }
+        }
+        window.addEventListener("contextmenu", onContextMenu, true);
+        window.addEventListener("pointerdown", onDragDown, true);
+        window.addEventListener("pointermove", onDragMove, { capture: true, passive: false });
+        window.addEventListener("pointerup", onDragEnd, true);
+        window.addEventListener("pointercancel", e => { if (drag && e.pointerId === drag.id) { drag.active = false; onDragEnd(e); } }, true);
+        window.addEventListener("click", swallowClick, true);
+        window.addEventListener("selectstart", blockWhileDragging, true);
+        window.addEventListener("dragstart", blockWhileDragging, true);
+        // touch: let vertical panning scroll the page, horizontal moves reach the scrubber
+        const touchCss = document.createElement("style");
+        touchCss.textContent = "video.vidosser-drag-scrub{touch-action:pan-y pinch-zoom}";
+        document.head.appendChild(touchCss);
+        function markVideos() {
+            const on = CFG.enabled !== false && CFG.drag_scrub !== false;
+            document.querySelectorAll("video").forEach(v => v.classList.toggle("vidosser-drag-scrub", on));
+        }
+        let markQueued = false;
+        new MutationObserver(() => {
+            if (markQueued) return;
+            markQueued = true;
+            requestAnimationFrame(() => { markQueued = false; markVideos(); });
+        }).observe(document.documentElement, { childList: true, subtree: true });
+        markVideos();
+
         return {
             config: CFG,
+            onSettings: markVideos,
+            dragging: () => !!(drag && drag.active),
             info: v => { const i = core.getInfo(v), s = stepState(v); return { fps: i.fps, source: i.fpsSource, frames: i.frames, target: s.target }; },
             step: (v, n) => queueSteps(v, n | 0, 0),
             jump: (v, n) => queueSteps(v, 0, n | 0),
@@ -826,6 +936,10 @@
         wheel_jump_modifier: "ctrl",  // modifier + wheel = one short jump per notch: ctrl | alt | shift | meta | none
         shift_frames: 10,
         invert_direction: false,
+        drag_scrub: true,             // left-button drag on a video = scrub frames
+        drag_pixels_per_frame: 8,
+        drag_invert: false,           // false: drag right = forward
+        drag_button: "left",          // "left" | "right"
         jump_mode: "seconds",     // "seconds" | "frames"
         jump_seconds: 0.5,
         jump_frames: 8,

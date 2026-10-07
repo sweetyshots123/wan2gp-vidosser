@@ -2,7 +2,7 @@
 
 *[Español](README.es.md)* · MIT License · v1.3.0
 
-**Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel or keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), and loops whole videos or a frame-accurate A-B segment. More tools will be added over time.
+**Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), and loops whole videos or a frame-accurate A-B segment. More tools will be added over time.
 
 It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survives WanGP updates.
 
@@ -14,6 +14,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - **1 mouse-wheel notch = exactly 1 frame**: no acceleration, no skipped frames, even when you spin the wheel fast. Wheel down = next frame, wheel up = previous. **Shift + wheel = 10 frames** per notch (configurable).
 - By default the wheel steps frames **only while a video is fullscreen** (the video player's own fullscreen or the gallery's fullscreen button). Outside fullscreen the wheel scrolls the page as usual, even over a video. This can be turned off.
 - **Ctrl + wheel = short jump**: each notch jumps exactly one *short jump* (the same size as Q / W, 0.5 s by default). The modifier is configurable (Ctrl, Alt, Shift, Meta/Cmd or none). Vidosser only blocks the browser's Ctrl + wheel zoom while it is actually stepping a video; everywhere else (and outside fullscreen with the default setting) Ctrl + wheel zooms the page as usual. Trackpad pinch gestures, which browsers report as Ctrl + wheel, are accumulated so that one pinch "step" is one jump instead of dozens.
+- **Drag to scrub**: hold the **left mouse button** (or the right one, see *drag button*) on a video and drag horizontally: every 8 px = 1 frame (configurable), drag right = forward, drag left = backward. Counting is position based and exact, so dragging back to where you started returns to the same frame. It starts only after 4 px of mostly horizontal movement, so a plain click still plays/pauses; a playing video pauses when the drag starts, and the click at the end of a drag doesn't restart it. With the **right button**, a plain right click still opens the normal context menu; the menu is blocked only when a drag actually happened. The drag keeps working when the pointer leaves the video (pointer capture). **Shift + drag** = 10 frames per step, **Ctrl + drag** (the short-jump modifier) = one short jump per step. Works inside and outside fullscreen (not affected by *wheel only in fullscreen*), and with a finger on touch screens (horizontal swipe; vertical swipes still scroll). Not used on the video's native control bar (bottom 40 px of a video with browser controls), gallery thumbnails, text fields or anything other than the video picture.
 - Keyboard: **A / S** = previous / next frame (holding the key keeps stepping one frame at a time). **Q / W** = jump back / forward by 0.5 s (rounded to whole frames at the video's frame rate) or by a fixed number of frames.
 - The real frame rate is read from the file (MP4/MOV/MKV/WebM), so stepping is exact for Wan (16 fps), LTX (24/25 fps), interpolated videos (32 fps) and more.
 - A playing video pauses on the first step. A small overlay shows `Frame N / last · fps` and fades out.
@@ -46,6 +47,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 | Next / previous frame | Wheel down / up | 1 notch = 1 frame; only in fullscreen by default |
 | Jump ×10 frames | Shift + wheel | configurable (`shift_frames`) |
 | Short jump (= Q / W) | Ctrl + wheel | modifier configurable (`wheel_jump_modifier`) |
+| Scrub frames | drag on the video (left button, or right if chosen) | 8 px = 1 frame; Shift + drag = ×10, Ctrl + drag = short jumps |
 | Previous frame | `A` | auto-repeat steps one frame per repeat |
 | Next frame | `S` | |
 | Jump back | `Q` | 0.5 s by default, or N frames |
@@ -76,7 +78,11 @@ Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes*
 | **Paso de fotogramas** (Frame stepping) | *Rueda del ratón: 1 muesca = 1 fotograma* (wheel stepping) | on | |
 | | *Rueda solo a pantalla completa* (wheel only in fullscreen) | on | off = wheel steps over any video, also outside fullscreen |
 | | *Invertir sentido de la rueda* (invert wheel) | off | on = wheel up goes forward |
-| | *Fotogramas con Shift + rueda* (Shift + wheel frames) | 10 | |
+| | *Fotogramas con Shift + rueda* (Shift + wheel frames) | 10 | also used by Shift + drag |
+| | *Arrastrar sobre el vídeo = pasar fotogramas* (drag to scrub) | on | inside and outside fullscreen |
+| | *Botón para arrastrar* (drag button) | *Izquierdo* (left) | or *Derecho* (right): plain right click = normal context menu |
+| | *Píxeles por fotograma al arrastrar* (pixels per frame) | 8 | 1–200 |
+| | *Invertir sentido al arrastrar* (invert drag) | off | on = drag right goes back |
 | **Salto corto** (Short jump: W / Q and modifier + wheel) | *Salto corto: medida* (unit) | seconds | *En segundos* (seconds) or *En fotogramas* (frames) |
 | | *Salto corto: segundos* (seconds) | 0.5 | rounded to whole frames |
 | | *Salto corto: fotogramas* (frames) | 8 | |
@@ -104,7 +110,8 @@ Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes*
   "keys":       { "enabled": true, "next_frame": "s", "prev_frame": "a", "jump_forward": "w", "jump_back": "q", "save_frame_as": "d",
                   "toggle_loop": "l", "mark_in": "i", "mark_out": "o", "clear_segment": "u" },
   "frame_step": { "enabled": true, "wheel_enabled": true, "wheel_fullscreen_only": true, "wheel_jump_modifier": "ctrl",
-                  "shift_frames": 10, "invert_direction": false, "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
+                  "shift_frames": 10, "invert_direction": false,
+                  "drag_scrub": true, "drag_pixels_per_frame": 8, "drag_invert": false, "drag_button": "left", "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
   "loop":       { "enabled": true, "loop_all": false },
   "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true,
                   "toast": true, "toast_ms": 2500, "flash": true, "sound": true, "sound_volume": 60 }
@@ -156,6 +163,8 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - In a video's **native fullscreen** (the fullscreen button in the browser's control bar of the video), the wheel, keys and middle click work, but browsers don't allow drawing over a natively fullscreen `<video>`: no overlay, messages, flash or loop bar there; saves are confirmed by the sound. Double-click the video instead (with *fullscreen with overlays* on), or use the gallery's own fullscreen button (top right of the gallery).
 - A-B looping relies on seeking back just before frame out+1 would be shown. It is frame-accurate in Chrome/Edge (tested at 16 and 24 fps); on a heavily loaded machine or in browsers without `requestVideoFrameCallback` an occasional extra frame can flash before the wrap.
 - Loop segments are kept only while the page is open (not saved to disk).
+- Drag to scrub uses the left button on the video picture, so the video's own drag gestures there (none in Chrome/Firefox by default) are replaced while it is on. Seeking with the native progress bar is unchanged. Touch scrubbing was tested with emulated touch in Chrome, not on a real phone/tablet.
+- Right-button drag: on **Windows** the context menu opens on release, so it is simply skipped after a drag. On **macOS and Linux** browsers open the context menu as soon as the right button is pressed, so a right-button drag usually isn't possible there: use the left button.
 - Ctrl + wheel and trackpad pinch: if you choose *Ninguno* (none) as the modifier, Ctrl + wheel zooms the browser as usual.
 - The middle click saves when you release the button. In ask mode, if the button is held for more than about 5 seconds, the browser no longer allows the *Save as* dialog and the frame is downloaded instead.
 - Direct mode saves on the machine running WanGP. If you use WanGP from another computer over the network, the file lands on the server.
@@ -169,6 +178,7 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **Middle click does nothing:** many mouse utilities (Logitech Options/G HUB, Razer Synapse, etc.) can remap the wheel click to another function, in which case the browser never receives a middle click. Set it back to "Middle click" for the browser, and check that *Clic central … = guardar fotograma* is enabled in the Vidosser tab.
 - **No overlay or messages in fullscreen:** you are in native video fullscreen (see Limitations). Double-click the video instead, or use the gallery's fullscreen button. Check that *Pantalla completa del vídeo con indicadores y mensajes* is on.
 - **Ctrl + wheel zooms the page:** that's expected outside fullscreen when *Rueda solo a pantalla completa* is on, or when the pointer isn't over a video with it off.
+- **Dragging on a video doesn't scrub / a click doesn't pause any more:** check *Arrastrar sobre el vídeo* in the Vidosser tab; a movement under 4 px counts as a click, more than that as a drag.
 - **No sound on save:** check *Sonido de cámara al guardar* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Rueda solo a pantalla completa* in the Vidosser tab.
 - **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.3.0 loaded`.
@@ -177,7 +187,7 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
-- **1.3.0**: Ctrl + wheel short jump (configurable modifier, trackpad pinch); save feedback (message, flash, shutter sound); fullscreen with overlays on double-click; loop module (loop all, L toggle, frame-accurate A-B segment with I / O / U).
+- **1.3.0**: drag on the video to scrub frames; Ctrl + wheel short jump (configurable modifier, trackpad pinch); save feedback (message, flash, shutter sound); fullscreen with overlays on double-click; loop module (loop all, L toggle, frame-accurate A-B segment with I / O / U).
 - **1.2.0**: middle-click (wheel click) save; wheel frame-stepping only in fullscreen by default; settings migration (missing keys use defaults); no `settings.json` shipped.
 - **1.1.0**: renamed to *Vidosser* (collection of video tools); keyboard frame stepping and jumps; save exact frame (PNG/JPG, ask/direct); Vidosser settings tab with live apply.
 - **1.0.0**: mouse-wheel frame stepping (one notch = one frame, Shift = 10), also in fullscreen.

@@ -13,6 +13,13 @@ Con la rueda del ratón:
 - **Ctrl + rueda = salto corto**: cada muesca da exactamente un *salto corto* (el mismo que Q / W, 0,5 s por defecto). El modificador se elige en la pestaña Vidosser (Ctrl, Alt, Shift, Meta/Cmd o ninguno). Vidosser solo bloquea el zoom del navegador con Ctrl + rueda cuando de verdad está moviendo un vídeo; en el resto de la página (y, con el ajuste por defecto, fuera de la pantalla completa) Ctrl + rueda hace zoom como siempre. Los gestos de pellizco del trackpad, que el navegador envía como Ctrl + rueda, se acumulan para que un gesto equivalga a un salto y no a decenas.
 - **Por defecto la rueda solo pasa fotogramas a pantalla completa** (la del vídeo o la de la galería); ahí funciona en cualquier punto de la pantalla. Fuera de la pantalla completa la rueda desplaza la página como siempre, aunque estés encima de un vídeo. Se puede cambiar en la pestaña Vidosser («Rueda solo a pantalla completa»): desactivado, la rueda pasa fotogramas con el ratón encima de cualquier vídeo.
 
+Arrastrando sobre el vídeo:
+- **Mantén pulsado el botón izquierdo (o el derecho, según «Botón para arrastrar») sobre un vídeo y arrastra en horizontal**: cada 8 píxeles = 1 fotograma (configurable); a la derecha = adelante, a la izquierda = atrás. La cuenta va por posición y es exacta: si vuelves al punto de partida, vuelves al mismo fotograma.
+- Empieza solo tras 4 píxeles de movimiento sobre todo horizontal, así que **un clic normal sigue pausando / reproduciendo**. Si el vídeo se está reproduciendo, se pausa al empezar a arrastrar, y el clic del final del arrastre no lo vuelve a poner en marcha. Con el **botón derecho**, un clic derecho normal sigue abriendo el menú contextual; el menú solo se bloquea si de verdad has arrastrado. Sigue funcionando aunque el ratón salga del vídeo.
+- **Shift + arrastrar** = 10 fotogramas por paso; **Ctrl + arrastrar** (el modificador del salto corto) = un salto corto por paso.
+- Funciona dentro y fuera de la pantalla completa (no depende de «Rueda solo a pantalla completa») y con el dedo en pantallas táctiles (deslizar en horizontal; en vertical sigue desplazando la página).
+- No actúa sobre la barra de controles nativa del vídeo (los 40 px de abajo de un vídeo con controles del navegador), las miniaturas de la galería, los cuadros de texto ni nada que no sea la imagen del vídeo.
+
 Con el teclado (teclas configurables en la pestaña **Vidosser**):
 - **A = fotograma anterior**, **S = fotograma siguiente** (1 fotograma por pulsación; si mantienes la tecla, sigue avanzando fotograma a fotograma).
 - **Q = salto atrás**, **W = salto adelante**: por defecto **0,5 segundos** (8 fotogramas a 16 fps, 12 a 24 fps). También se puede fijar un número de fotogramas.
@@ -54,7 +61,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
-- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift.
+- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar e invertir sentido al arrastrar.
 - **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
 - **Bucle**: repetir todos los vídeos en bucle.
 - **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
@@ -130,6 +137,10 @@ Sección `frame_step`:
 | `wheel_jump_modifier` | `"ctrl"` | modificador + rueda = salto corto: `"ctrl"`, `"alt"`, `"shift"`, `"meta"` o `"none"` |
 | `shift_frames` | 10 | fotogramas por muesca con Shift |
 | `invert_direction` | false | `true` = rueda arriba avanza |
+| `drag_scrub` | true | arrastrar sobre el vídeo con el botón izquierdo = pasar fotogramas |
+| `drag_pixels_per_frame` | 8 | píxeles de arrastre por fotograma (1-200) |
+| `drag_invert` | false | `true` = arrastrar a la derecha retrocede |
+| `drag_button` | `"left"` | `"left"` (izquierdo) o `"right"` (derecho) |
 | `jump_mode` | `"seconds"` | `"seconds"` (usa `jump_seconds`) o `"frames"` (usa `jump_frames`) |
 | `jump_seconds` | 0.5 | salto en segundos (se redondea al fotograma más cercano) |
 | `jump_frames` | 8 | salto en fotogramas (si `jump_mode` es `"frames"`) |
@@ -161,6 +172,8 @@ Sección `save_frame`:
 
 - En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: no se ven el indicador, los mensajes, el destello ni la barra del bucle; el guardado se confirma con el sonido. Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
 - El bucle A-B vuelve al inicio justo antes de que se vea el fotograma siguiente al final. Es exacto al fotograma en Chrome/Edge (probado a 16 y 24 fps); con el equipo muy cargado o en navegadores sin `requestVideoFrameCallback` puede colarse algún fotograma de más antes de volver.
+- El arrastre para pasar fotogramas usa el botón izquierdo sobre la imagen del vídeo; la barra de progreso nativa funciona como siempre. En pantallas táctiles se ha probado con táctil emulado en Chrome, no en un móvil o tableta real.
+- Arrastrar con el botón derecho: en **Windows** el menú contextual se abre al soltar, así que tras un arrastre simplemente no aparece. En **macOS y Linux** el navegador abre el menú nada más pulsar el botón derecho, así que ahí normalmente no se puede arrastrar con él: usa el izquierdo.
 - Los segmentos del bucle solo se guardan mientras la página está abierta.
 - Si eliges «Ninguno» como modificador del salto corto, Ctrl + rueda hace zoom en el navegador como siempre.
 - El clic central guarda al soltar el botón. Si lo mantienes pulsado más de unos 5 segundos en modo «Preguntar», el navegador ya no deja abrir el diálogo y el fotograma se descarga como una descarga normal.
