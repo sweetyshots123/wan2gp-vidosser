@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.5
+*[English](README.md)* · Licencia MIT · versión 1.4.6
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -43,7 +43,9 @@ En general:
 - Un indicador muestra el volumen mientras arrastras: «Volumen ██████░░░░  60 %» («0 % (silencio)» abajo del todo).
 - Va de 0 % a 100 %. Si te pasas de un extremo y vuelves, el volumen cambia en cuanto das la vuelta (no hay que deshacer lo que te pasaste).
 - Si el vídeo está **silenciado**, al subir se quita el silencio y empieza desde 0 %.
-- No pausa el vídeo (el arrastre de fotogramas sí). Usa el mismo botón que el arrastre de fotogramas («Botón para arrastrar»); a pantalla completa, con el botón izquierdo, el cursor se oculta mientras arrastras, pero **sin bloqueo del puntero** (en Windows, Chrome da movimientos poco fiables con el puntero bloqueado; para el volumen sobra recorrido de pantalla). El clic del final del arrastre no pausa ni reproduce. Un clic normal y el **doble clic** (pantalla completa) siguen igual que antes.
+- **Botón para arrastrar el volumen** (`volume.drag_button`: izquierdo por defecto, o derecho). Si es el mismo botón que el del arrastre de fotogramas («Botón para arrastrar»), un mismo botón hace las dos cosas y decide la dirección: los primeros 4 px de movimiento eligen horizontal (fotogramas) o vertical (volumen) y se mantiene hasta que sueltas. Si son **botones distintos**, cada botón hace solo lo suyo: el del volumen solo cambia el volumen (solo cuenta el movimiento vertical; el lateral se ignora) y el de fotogramas solo pasa fotogramas (un arrastre vertical con él no hace nada). En los dos casos el clic o el menú contextual del final del arrastre se ignoran.
+- **Botón derecho**: un clic derecho normal (moviendo menos de 4 px) sigue abriendo el menú contextual del navegador; tras un arrastre con el botón derecho el menú no aparece (en Windows se abre al soltar, así que simplemente se omite). En macOS y Linux el navegador abre el menú nada más pulsar el botón derecho, así que ahí usa el izquierdo.
+- No pausa el vídeo (el arrastre de fotogramas sí). A pantalla completa, **solo con el botón izquierdo**, el cursor se oculta mientras arrastras (nunca con el derecho), pero **sin bloqueo del puntero** (en Windows, Chrome da movimientos poco fiables con el puntero bloqueado; para el volumen sobra recorrido de pantalla). El clic del final del arrastre no pausa ni reproduce. Un clic normal y el **doble clic** (pantalla completa) siguen igual que antes.
 - Funciona dentro y fuera de la pantalla completa: la de Vidosser (doble clic), la de la galería y la nativa del vídeo. En la nativa el indicador se muestra como un subtítulo arriba a la izquierda. En pantallas táctiles, deslizar en vertical cambia el volumen **solo a pantalla completa**; fuera de ella sigue desplazando la página.
 - **Recordar el volumen** (activado por defecto): el último volumen que pones (arrastrando o con la barra del vídeo) se usa en los vídeos que se cargan después, también al recargar la página (se guarda en este navegador). Nunca se recuerda el silencio.
 
@@ -94,7 +96,7 @@ Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, B, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
 - **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar, ocultar el cursor mientras arrastras y dar la vuelta en los extremos.
 - **Salto corto y modificador + rueda**: medida (segundos o fotogramas), segundos, fotogramas, el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno), qué hace el **modificador + rueda** (*Salto corto* o *Velocidad de reproducción*) y **recordar la velocidad**. Si eliges Shift, Shift + rueda hace la acción elegida en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
-- **Volumen**: arrastrar en vertical = volumen, píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
+- **Volumen**: arrastrar en vertical = volumen, botón para arrastrar el volumen (izquierdo o derecho), píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
 - **Bucle**: repetir todos los vídeos en bucle y **modo de bucle** (*Normal (vuelve al principio)* o *Boomerang (adelante y atrás)*).
 - **Vídeo nuevo**: a pantalla completa, no saltar al vídeo nuevo; al salir de la pantalla completa, mostrar el vídeo nuevo; aviso «Nuevo vídeo listo».
 - **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
@@ -123,7 +125,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.5.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.6.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -209,6 +211,7 @@ Sección `volume`:
 | `drag_volume` | true | clic mantenido + arrastrar en vertical sobre el vídeo = volumen (arriba = más alto) |
 | `drag_pixels_per_percent` | 2 | píxeles de arrastre vertical por cada 1 % de volumen (0,2-50) |
 | `drag_invert` | false | `true` = arrastrar hacia abajo sube el volumen |
+| `drag_button` | `"left"` | botón del arrastre del volumen: `"left"` (izquierdo) o `"right"` (derecho). Igual que `frame_step.drag_button` = un botón, decide la dirección; distinto = ese botón solo cambia el volumen y el otro solo pasa fotogramas |
 | `remember` | true | usar el último volumen en los vídeos siguientes (también tras recargar la página) |
 
 Sección `new_video`:

@@ -1,6 +1,6 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.5
+*[Español](README.es.md)* · MIT License · v1.4.6
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
@@ -36,7 +36,9 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - An overlay shows the level while dragging: `Volume ██████░░░░  60 %` (`0 % (muted)` at the bottom).
 - Clamped to 0–100 %; if you overshoot a limit and come back, the volume reacts as soon as you turn around.
 - On a **muted** video, dragging up unmutes it and starts from 0 %.
-- It doesn't pause the video (scrubbing does). It uses the same button as drag-to-scrub (*drag button*); in fullscreen with the left button the cursor is hidden while you drag, but **without pointer lock** (Chrome on Windows reports unreliable movement under the lock, and the screen gives plenty of travel for 0–100 %). The click that ends the drag doesn't toggle play. A plain click and the **double-click** (fullscreen) behave exactly as before.
+- **Volume drag button** (*Volume drag button*, `volume.drag_button`: left by default, or right). If it is the same button as drag-to-scrub (*drag button*), one press does both and the direction decides: the first 4 px of movement pick horizontal (scrub) or vertical (volume) and that is kept until you release. If they are **different buttons**, each button does only its own job: the volume button's drag only changes the volume (only the vertical movement counts, sideways movement is ignored) and the scrub button's drag only steps frames (a vertical drag with it does nothing). Either way the click or context menu that ends a drag is swallowed.
+- **Right button**: a plain right click (moving less than 4 px) still opens the browser's context menu; after a right-button drag the menu is blocked (on Windows it opens on release, so it is simply skipped). On macOS / Linux the browser opens the menu as soon as the right button goes down, so use the left button there.
+- It doesn't pause the video (scrubbing does). In fullscreen, **only with the left button**, the cursor is hidden while you drag (never with the right button), but **without pointer lock** (Chrome on Windows reports unreliable movement under the lock, and the screen gives plenty of travel for 0–100 %). The click that ends the drag doesn't toggle play. A plain click and the **double-click** (fullscreen) behave exactly as before.
 - Works inside and outside fullscreen: Vidosser's fullscreen (double-click), the gallery's fullscreen button and the video's native fullscreen, where the overlay is shown as a subtitle line at the top left. On touch screens a vertical swipe changes the volume **only in fullscreen**; outside fullscreen it keeps scrolling the page.
 - *Remember the volume for the next videos* (on by default): the last volume you set (by dragging or with the video's own slider) is applied to videos loaded later, also after a page reload (stored in the browser). Muting is never remembered.
 
@@ -72,7 +74,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 | Jump ×10 frames | Shift + wheel | configurable (`shift_frames`) |
 | Short jump (= Q / W) *or* playback speed | Ctrl + wheel | action configurable (`wheel_mod_action`: `jump` / `speed`); modifier configurable (`wheel_jump_modifier`) |
 | Scrub frames | drag horizontally on the video (left button, or right if chosen) | 8 px = 1 frame; Shift + drag = ×10, Ctrl + drag = short jumps |
-| Volume | drag vertically on the video (same button) | up = louder, 2 px = 1 % |
+| Volume | drag vertically on the video (left button, or right if chosen) | up = louder, 2 px = 1 %; button configurable (`volume.drag_button`) |
 | Previous frame | `A` | auto-repeat steps one frame per repeat |
 | Next frame | `S` | |
 | Jump back | `Q` | 0.5 s by default, or N frames |
@@ -121,6 +123,7 @@ Open the **Vidosser** tab in WanGP, change options, and click **Save settings**.
 | | *Modifier + wheel does* | Short jump | *Short jump* (one notch = one short jump, same as W / Q) or *Playback speed* (±0.25× per notch, 0.25–2.00; overlay `Speed 1.25×`). Forward for frames = faster; *Invert wheel direction* flips both |
 | | *Remember the playback speed for the next videos* | on | only when the action is *Playback speed*; also after a page reload (stored in the browser) |
 | **Volume** | *Vertical drag = volume* | on | up = louder; plain click / double-click unchanged |
+| | *Volume drag button* | Left | *Right*: the right button changes the volume. Same as *Drag button* = one button, the direction decides; different = each button only does its own job |
 | | *Pixels per 1 % of volume* | 2 | 0.2–50 |
 | | *Invert volume direction* | off | on = drag down is louder |
 | | *Remember the volume for the next videos* | on | also after a page reload (stored in the browser) |
@@ -169,7 +172,7 @@ With a Spanish browser the same tab is shown in Spanish (*Teclas*, *Paso de foto
                   "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8,
                   "wheel_mod_action": "jump", "speed_remember": true },
   "loop":       { "enabled": true, "loop_all": true, "mode": "normal" },
-  "volume":     { "enabled": true, "drag_volume": true, "drag_pixels_per_percent": 2.0, "drag_invert": false, "remember": true },
+  "volume":     { "enabled": true, "drag_volume": true, "drag_pixels_per_percent": 2.0, "drag_invert": false, "drag_button": "left", "remember": true },
   "new_video":  { "enabled": true, "no_autojump_fullscreen": true, "jump_on_fullscreen_exit": true, "notify": true },
   "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true,
                   "toast": true, "toast_ms": 2500, "flash": true, "sound": true, "sound_volume": 60 }
@@ -193,7 +196,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.5.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.6.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -244,12 +247,13 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
 - **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.5 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.6 loaded`.
 - **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.6**: choose the mouse button for the vertical volume drag (left / right; a different button from the scrub = volume only).
 - **1.4.5**: Boomerang loop mode (forwards then backwards, also between A and B; `B` per video; silent backwards at the playback speed).
 - **1.4.4**: modifier + wheel configurable as short jump or playback speed (±0.25×, 0.25–2.00; same invert as frames; remember speed).
 - **1.4.3**: wrap around at the ends when scrubbing / stepping / jumping (on by default; switchable).

@@ -2,6 +2,14 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.6] - 2026-10-09
+### Added
+- **Volume drag button** (`volume.drag_button`: `"left"` | `"right"`, default `"left"`; tab: *Volume drag button* / *Botón para arrastrar el volumen* in the Volume section, *Left* / *Izquierdo*, *Right* / *Derecho*). Older `settings.json` files get `"left"` (unchanged behaviour).
+  - **Same button as the scrub** (`frame_step.drag_button`): as before, one press does both and the axis is locked after 4 px by the dominant direction (horizontal = scrub, vertical = volume).
+  - **Different buttons**: the volume button's drag is volume only: it starts after 4 px in any direction, only the vertical movement changes the volume, sideways is ignored (no axis lock), and it never scrubs. The scrub button's drag only scrubs: a mostly-vertical drag with it does nothing, but it still counts as a drag (no play/pause toggle or context menu after it).
+  - Right button: the context menu is blocked only after a drag (moved ≥ 4 px; Windows opens it on release, so it is skipped then); a plain right click keeps the browser menu. A right-button drag uses pointer capture (no Pointer Lock) and never hides the cursor, in and outside fullscreen (container, gallery and native video fullscreen). The cursor is still hidden only while the LEFT button is held during a drag in fullscreen.
+  - Touch is unchanged (a finger does both; a vertical swipe changes the volume only in fullscreen). The volume drag still doesn't interrupt Boomerang going backwards; middle-click save and double-click fullscreen are unchanged.
+
 ## [1.4.5] - 2026-10-08
 ### Added
 - **Boomerang loop mode** (`loop.mode`: `"normal"` | `"boomerang"`, default `"normal"`; tab: *Loop mode* / *Modo de bucle* in the Loop section): when a looping video reaches its last frame it plays **backwards** to the first frame, then forwards again, like a bounce — over and over. With an A-B segment it bounces between A and B. It only acts when the video loops (*Loop all videos*, **L**) or has an A-B segment; with the loop off the video simply ends. Older `settings.json` files get `"normal"`.

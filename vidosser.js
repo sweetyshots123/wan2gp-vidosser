@@ -17,7 +17,8 @@
 //                       * next_frame / prev_frame (S / A), jump_forward / jump_back
 //                         (W / Q: jump_seconds converted with the video fps, or jump_frames)
 //                       * drag on the video: horizontal = scrub frames, vertical = volume
-//                         (axis chosen by the dominant direction after DRAG_THRESHOLD px, then locked)
+//                         (axis chosen by the dominant direction after DRAG_THRESHOLD px, then locked;
+//                         a separate volume button, volume.drag_button, drags the volume only)
 //                       * wrap (frame_step.wrap): past the last frame -> first, past the first -> last
 //                         (drag / wheel / keys / jumps; off = clamp at the ends)
 //   MODULE volume       volume helpers for the vertical drag (overlay, clamp, unmute, remember)
@@ -770,6 +771,7 @@
         drag_volume: true,            // click-and-hold + vertical drag on a video = volume (up = louder)
         drag_pixels_per_percent: 2,   // vertical px per 1 % of volume
         drag_invert: false,           // false: drag up = louder
+        drag_button: "left",          // "left" | "right" (1.4.6); = frame_step.drag_button: axis decides, else volume only
         remember: true,               // keep the last volume for the next videos (also after reload)
     }, SETTINGS.volume || {}));
 
@@ -1020,6 +1022,12 @@
         // 0..100 and re-anchored at the limits (moving back reacts at once). A volume drag
         // does not pause the video and swallows the click that ends it, like the scrub.
         // Touch: a vertical swipe only while fullscreen (outside it keeps scrolling the page).
+        // Volume button (1.4.6, volume.drag_button "left" | "right"): when it is the scrub button,
+        // one press does both and the axis decides (above). When they differ, the volume button's
+        // drag is volume only (starts after DRAG_THRESHOLD px in any direction, only vertical
+        // movement counts) and the scrub button's drag is scrub only (a mostly-vertical drag with it
+        // does nothing but is still a drag: no play toggle / context menu after it). A right-button drag blocks the context menu that follows
+        // (Windows opens it on release); a right click that didn't move past the threshold keeps it.
         // Cursor (1.4.1): it is hidden ONLY while the LEFT mouse button is held during a drag
         // in fullscreen; outside fullscreen and with the right button the drag uses pointer
         // capture with a visible cursor. Pointer Lock is only used for a horizontal scrub
@@ -1032,6 +1040,7 @@
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
+        const volButton = () => String((VOL && VOL.config.drag_button) || "left").toLowerCase() === "right" ? 2 : 0;
         function dragUnit(e) {
             const jm = jumpModifier();
             if (jm && e[MODIFIERS[jm]]) return { frames: 0, jumps: 1 };
@@ -1041,11 +1050,16 @@
         function onDragDown(e) {
             if (drag) endDrag("stale", false);                          // a release we never saw: start clean
             swallowClickUntil = 0; swallowMenuUntil = 0;                // a new press: an expected click/menu never came (pointer lock)
-            const scrub = CFG.enabled !== false && CFG.drag_scrub !== false, vol = !!(VOL && VOL.dragOn());
-            if (!scrub && !vol) return;
+            const scrubOn = CFG.enabled !== false && CFG.drag_scrub !== false, volOn = !!(VOL && VOL.dragOn());
+            if (!scrubOn && !volOn) return;
             if (!e.isPrimary || (e.pointerType === "pen" && e.pressure === 0)) return;
-            const button = e.pointerType === "touch" ? 0 : dragButton();     // a finger always scrubs
-            if (e.button !== button) return;
+            const touch = e.pointerType === "touch";                         // a finger does both (axis decides)
+            const button = e.button;
+            if (!touch && button !== 0 && button !== 2) return;
+            const same = touch || dragButton() === volButton();
+            const scrub = scrubOn && (touch || button === dragButton()), vol = volOn && (touch || button === volButton());
+            if (!scrub && !vol) return;
+            const volOnly = vol && !scrub && !same;                          // separate volume button: any direction starts it
             const v = e.target;
             if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
             const jm = jumpModifier();
@@ -1055,7 +1069,7 @@
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
             drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, lock: null, active: false, done: 0, type: e.pointerType, button,
-                     scrub, vol, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
+                     scrub, vol, volOnly, split: !same && volOn, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
         }
         // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
         // element, also inside a fullscreen container), on the capturing video and on the
@@ -1125,21 +1139,26 @@
             if (!drag.active) {
                 const adx = Math.abs(dx), ady = Math.abs(dy);
                 if (Math.max(adx, ady) < DRAG_THRESHOLD) return;          // not decided yet: still a click
-                const axis = ady > adx ? "y" : "x";                         // dominant direction, locked from now on
+                const axis = drag.volOnly || ady > adx ? "y" : "x";         // dominant direction, locked from now on
                 const fsTouch = e.pointerType !== "touch" || !!core.fsElement();   // touch outside fullscreen: vertical = page scroll
-                if (axis === "y" ? !(drag.vol && fsTouch) : !drag.scrub) { drag = null; return; }   // not ours
-                drag.axis = axis;
+                // separate buttons: a vertical drag with the scrub button is still a drag (does nothing,
+                // swallows the click / context menu that ends it), like a horizontal one with the volume button
+                const dead = axis === "y" && !drag.vol && drag.scrub && drag.split;
+                if (!dead && (axis === "y" ? !(drag.vol && fsTouch) : !drag.scrub)) { drag = null; return; }   // not ours
+                drag.axis = dead ? "none" : axis;
                 drag.active = true;
                 // hidden cursor / Pointer Lock: only a held LEFT mouse button, only in fullscreen
                 const fs = core.fsElement();
-                drag.hide = e.pointerType === "mouse" && drag.button === 0 && !!(fs && (fs === drag.v || fs.contains(drag.v)));
+                drag.hide = !dead && e.pointerType === "mouse" && drag.button === 0 && !!(fs && (fs === drag.v || fs.contains(drag.v)));
                 if (drag.hide && axis === "x" && CFG.drag_pointer_lock !== false && drag.v.requestPointerLock) startLock(drag);
                 else capture(drag);
                 if (drag.hide && CFG.drag_hide_cursor !== false) hideCursor(drag.v);
-                if (axis === "x") { if (!drag.v.paused) drag.v.pause(); }
+                if (dead) { /* nothing to do */ }
+                else if (axis === "x") { if (!drag.v.paused) drag.v.pause(); }
                 else drag.level = VOL.level(drag.v);                      // muted counts as 0 %: raising starts from silence
             }
             e.preventDefault();
+            if (drag.axis === "none") return;
             if (drag.axis === "y") {
                 const ppp = Math.max(0.1, Number(VOL.config.drag_pixels_per_percent) || 2);
                 const step = (dy - drag.prevDy) / ppp;

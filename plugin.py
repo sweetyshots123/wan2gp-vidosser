@@ -8,7 +8,8 @@ Current tools (modules):
     W / Q = jump forward / back), also in fullscreen. Wrap (default on): past the last
     frame continues at the first and before the first at the last (drag, wheel, keys).
     Modifier + wheel: short jump or playback speed (±0.25×, 0.25–2), same invert as frames.
-  * volume: click-and-hold on the video and drag vertically = volume (up = louder).
+  * volume: click-and-hold on the video and drag vertically = volume (up = louder);
+    volume.drag_button left | right (same as the scrub button: axis decides, else volume only).
   * new_video: in fullscreen, a newly generated video doesn't replace the one you watch.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
     loop (frame accurate), U = clear the segment; loop.mode normal | boomerang (ping-pong,
@@ -44,7 +45,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.5"
+PLUGIN_VERSION = "1.4.6"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -121,18 +122,25 @@ _TEXT = {
                   "primer / último fotograma. No afecta al bucle del segmento A-B."),
     # volume
     "sec_volume": ("### Volume\nClick on the video, hold and drag **vertically**: up = louder, down = quieter. "
-                   "Dragging horizontally still steps frames: the direction is decided in the first 4 px (whichever moves more) and kept "
-                   "until you release. Uses the same button as frame dragging; in fullscreen, with the left button, the cursor "
-                   "is hidden while you drag (no pointer lock).",
+                   "The button is chosen below. If it is the same as the frame-dragging button, dragging horizontally still steps frames: "
+                   "the direction is decided in the first 4 px (whichever moves more) and kept until you release. If it is a different "
+                   "button, that button only changes the volume and the other one only steps frames. In fullscreen, only with the left "
+                   "button, the cursor is hidden while you drag (no pointer lock).",
                    "### Volumen\nHaz clic sobre el vídeo, mantén pulsado y arrastra **en vertical**: hacia arriba sube el volumen, hacia abajo lo baja. "
-                   "Arrastrar en horizontal sigue pasando fotogramas: la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene "
-                   "hasta que sueltas. Usa el mismo botón que el arrastre de fotogramas; a pantalla completa, con el botón izquierdo, el cursor "
+                   "El botón se elige abajo. Si es el mismo que el de arrastrar fotogramas, arrastrar en horizontal sigue pasando fotogramas: "
+                   "la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene hasta que sueltas. Si es otro botón, "
+                   "ese botón solo cambia el volumen y el otro solo pasa fotogramas. A pantalla completa, solo con el botón izquierdo, el cursor "
                    "se oculta mientras arrastras (sin bloqueo del puntero)."),
     "drag_volume": ("Vertical drag = volume", "Arrastrar en vertical = volumen"),
     "drag_volume_info": ("A click or double-click without dragging does the usual. If the video is muted, raising turns the sound on. "
                          "On touch screens, a vertical swipe only changes the volume in fullscreen.",
                          "Un clic o un doble clic sin arrastrar hacen lo de siempre. Si el vídeo está silenciado, al subir se activa el sonido. "
                          "En pantallas táctiles, el deslizamiento vertical solo cambia el volumen a pantalla completa."),
+    "volume_button": ("Volume drag button", "Botón para arrastrar el volumen"),
+    "volume_button_info": ("Same as «Drag button» (frames): one button, the direction decides. Different: this button only changes the volume, "
+                           "the other only steps frames. Right button: a plain right click still opens the menu; after a drag it doesn't.",
+                           "Igual que «Botón para arrastrar» (fotogramas): un solo botón, decide la dirección. Distinto: este botón solo cambia el "
+                           "volumen y el otro solo pasa fotogramas. Botón derecho: un clic derecho sin arrastrar sigue abriendo el menú; tras un arrastre, no."),
     "volume_ppp": ("Pixels per 1 % of volume", "Píxeles por 1 % de volumen"),
     "volume_ppp_info": ("2 = 200 px of dragging to go from 0 % to 100 %.", "2 = 200 px de arrastre para pasar de 0 % a 100 %."),
     "volume_invert": ("Invert volume direction (down = louder)", "Invertir sentido del volumen (abajo = más alto)"),
@@ -342,6 +350,7 @@ DEFAULT_SETTINGS = {
         "drag_volume": True,        # click-and-hold on a video + vertical drag = volume (up = louder)
         "drag_pixels_per_percent": 2.0,  # vertical px per 1 % of volume (0.2..50)
         "drag_invert": False,       # False: drag up = louder
+        "drag_button": "left",      # "left" | "right"; = frame_step.drag_button: axis decides, else this button = volume only
         "remember": True,           # keep the last volume for the next videos (also after a page reload)
     },
     "new_video": {
@@ -372,11 +381,13 @@ _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("save_frame", "mode"): ("ask", "direct"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
             ("frame_step", "drag_button"): ("left", "right"),
+            ("volume", "drag_button"): ("left", "right"),
             ("general", "hide_controls"): ("off", "fullscreen", "always")}
 # dropdown / radio choices: (label key, value). Values are what settings.json stores (never translated).
 _CHOICE_KEYS = {
     "hide_controls": [("ch_hc_off", "off"), ("ch_hc_fullscreen", "fullscreen"), ("ch_hc_always", "always")],
     "drag_button": [("ch_left", "left"), ("ch_right", "right")],
+    "volume_button": [("ch_left", "left"), ("ch_right", "right")],
     "jump_modifier": [("ch_ctrl", "ctrl"), ("ch_alt", "alt"), ("ch_shift", "shift"), ("ch_meta", "meta"), ("ch_none", "none")],
     "jump_mode": [("ch_seconds", "seconds"), ("ch_frames", "frames")],
     "wheel_mod_action": [("ch_jump", "jump"), ("ch_speed", "speed")],
@@ -639,6 +650,9 @@ class VidosserPlugin(WAN2GPPlugin):
                                               info=T("drag_volume_info")), label="drag_volume", info="drag_volume_info")
                 volume_ppp = loc(gr.Number(label=T("volume_ppp"), value=current("volume", "drag_pixels_per_percent"), minimum=0.2, maximum=50, step=0.5,
                                            elem_id="vidosser_volume_pixels_per_percent", info=T("volume_ppp_info")), label="volume_ppp", info="volume_ppp_info")
+                volume_button = loc(gr.Dropdown(label=T("volume_button"), choices=C("volume_button"), value=current("volume", "drag_button"),
+                                                elem_id="vidosser_volume_drag_button", info=T("volume_button_info")),
+                                    label="volume_button", info="volume_button_info", choices=("choices", "volume_button"))
                 volume_invert = loc(gr.Checkbox(label=T("volume_invert"), value=current("volume", "drag_invert"), elem_id="vidosser_volume_invert"), label="volume_invert")
                 volume_remember = loc(gr.Checkbox(label=T("volume_remember"), value=current("volume", "remember"), elem_id="vidosser_volume_remember",
                                                   info=T("volume_remember_info")), label="volume_remember", info="volume_remember_info")
@@ -727,7 +741,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -762,7 +776,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember", "loop_mode")
+                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -781,7 +795,7 @@ class VidosserPlugin(WAN2GPPlugin):
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
-                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", lang="en"):
+                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -820,6 +834,9 @@ class VidosserPlugin(WAN2GPPlugin):
         wheel_mod_action = str(wheel_mod_action or "jump").lower()
         if wheel_mod_action not in _CHOICES[("frame_step", "wheel_mod_action")]:
             errors.append(tr("msg_invalid", lang, label=tr("wheel_mod_action", lang)))
+        volume_button = str(volume_button or "left").lower()
+        if volume_button not in _CHOICES[("volume", "drag_button")]:
+            errors.append(tr("msg_invalid", lang, label=tr("volume_button", lang)))
         loop_mode = str(loop_mode or "normal").lower()
         if loop_mode not in _CHOICES[("loop", "mode")]:
             errors.append(tr("msg_invalid", lang, label=tr("loop_mode", lang)))
@@ -844,7 +861,7 @@ class VidosserPlugin(WAN2GPPlugin):
                                    hide_controls=hide_controls, show_thin_progress=bool(thin_progress))
         settings["loop"].update(loop_all=bool(loop_all), mode=loop_mode)
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
-                                  remember=bool(volume_remember))
+                                  drag_button=volume_button, remember=bool(volume_remember))
         settings["new_video"].update(no_autojump_fullscreen=bool(no_autojump), jump_on_fullscreen_exit=bool(jump_on_exit), notify=bool(new_notify))
         try:
             save_settings(settings)
