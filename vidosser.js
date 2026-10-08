@@ -17,6 +17,8 @@
 //                         (W / Q: jump_seconds converted with the video fps, or jump_frames)
 //                       * drag on the video: horizontal = scrub frames, vertical = volume
 //                         (axis chosen by the dominant direction after DRAG_THRESHOLD px, then locked)
+//                       * wrap (frame_step.wrap): past the last frame -> first, past the first -> last
+//                         (drag / wheel / keys / jumps; off = clamp at the ends)
 //   MODULE volume       volume helpers for the vertical drag (overlay, clamp, unmute, remember)
 //   MODULE container_fs video fullscreen on a container (not native) so overlays/toasts show
 //   MODULE loop         loop all videos, loop toggle (L), A-B segment loop (I / O, U = clear)
@@ -877,14 +879,24 @@
             const base = ours ? s.target                                 // keep counting from our queued target
                               : Math.max(0, Math.min(Number.isFinite(last) ? last : Infinity,   // resync (user played / scrubbed);
                                     Math.floor(video.currentTime * fps + 1e-6)));            // at the very end currentTime = duration
-            const target = Math.max(0, Math.min(last, base + n));
+            // wrap (frame_step.wrap, default on): past the last frame continues at 0, past 0 continues at the last;
+            // multiple wraps in one batch (long drag / held key / fast wheel) are fine. Off = clamp at the ends.
+            // A-B segment looping is separate and unchanged. Without a known frame count there is nothing to wrap to.
+            let target, wrapped = false;
+            if (CFG.wrap !== false && Number.isFinite(last) && last >= 0) {
+                const count = last + 1;                                  // frames 0..last inclusive
+                target = ((base + n) % count + count) % count;
+                wrapped = target !== base + n;
+            } else {
+                target = Math.max(0, Math.min(last, base + n));
+            }
             let t = (target + 0.5) / fps;                                // middle of the frame: no rounding ambiguity
             const dur = video.duration;
             if (Number.isFinite(dur) && dur > 0) t = Math.min(t, Math.max(0, dur - 0.001));
             core.seekTo(video, t);                                      // queued: latest target wins, nothing dropped
             s.target = target; s.targetFps = fps; s.lastSetTime = t;
             core.showOverlay(video, `Frame ${target}` + (Number.isFinite(last) ? ` / ${last}` : "") +
-                `  ·  ${core.fpsLabel(info)}` + (label ? `  ·  ${label}` : ""));
+                `  ·  ${core.fpsLabel(info)}` + (label ? `  ·  ${label}` : "") + (wrapped ? "  ·  ↻" : ""));   // ↻ = went round the end
         }
 
         function queueSteps(video, frames, jumps) {
@@ -1193,6 +1205,7 @@
         drag_button: "left",          // "left" | "right"
         drag_pointer_lock: true,      // Pointer Lock while scrubbing, left button, fullscreen only (Chrome shows its "press Esc" banner)
         drag_hide_cursor: true,       // hide the cursor while the left button is held during a drag, fullscreen only
+        wrap: true,                   // past the last / first frame continues at the other end (drag, wheel, keys, jumps)
         jump_mode: "seconds",     // "seconds" | "frames"
         jump_seconds: 0.5,
         jump_frames: 8,
@@ -1710,7 +1723,14 @@
             };
             if (rvfc) v.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
             v.addEventListener("pause", () => { clearTimeout(timers.get(v)); timers.delete(v); });
+            // A seek of a PAUSED video onto the last frame (a frame step / scrub / wrap through the end)
+            // makes Chrome land on `duration` and fire "ended": that is not playback reaching the end,
+            // so it must not jump to `in` and start playing (1.4.3: scrubbing through the end with
+            // frame_step.wrap would be cut). Any play() clears the flag.
+            let seekWhilePaused = false;
+            v.addEventListener("seeking", () => { seekWhilePaused = v.paused; });
             v.addEventListener("play", () => {
+                seekWhilePaused = false;
                 const s = segOf(v), info = core.getInfo(v);
                 if (!ready(s) || !info.fps) return;
                 const f = frameAt(v.currentTime, info.fps);
@@ -1718,6 +1738,7 @@
                 else check(v, v.currentTime, performance.now());     // paused on `out`: no rVFC for that frame, arm the wrap now
             });
             v.addEventListener("ended", () => {                    // `out` = last frame: loop instead of stopping
+                if (seekWhilePaused) return;
                 const s = segOf(v), info = core.getInfo(v);
                 if (ready(s) && info.fps) { seekIn(v, s, info.fps); v.play().catch(() => {}); }
             });

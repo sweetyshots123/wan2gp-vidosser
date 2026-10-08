@@ -2,6 +2,12 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.3] - 2026-10-08
+### Added
+- **Wrap around at the ends** (`frame_step.wrap`, default on): when drag-scrubbing, turning the wheel, stepping with A / S or jumping with Q / W / modifier + wheel, going past the last frame continues at the first one, and going back past the first continues at the last one — as many times as you like in one drag or held key. The overlay shows the wrapped frame number and a ↻ mark when a wrap happened. Off = stop at the first / last frame (≤ 1.4.2 behaviour). The A-B segment loop is unchanged. Older `settings.json` files get the option from the defaults (on).
+### Fixed
+- With an A-B segment set, a frame step / scrub onto the very last frame of a **paused** video made Chrome fire `ended` (it lands on `duration`), which jumped to the segment start and started playing. A seek-induced `ended` of a paused video is now ignored; playback reaching the end still loops the segment.
+
 ## [1.4.2] - 2026-10-08
 ### Added
 - **English / Spanish UI, following the browser language.** Every on-screen text of Vidosser now exists in English and Spanish and is picked from the browser's language (`navigator.languages[0]`, else `navigator.language`): Spanish for any `es-*` (`es`, `es-ES`, `es-MX`, `es-419`…), English for every other language (English is the default and the fallback). Covers the Vidosser tab (labels, help texts, section headers, dropdown / radio choices, buttons, validation and save messages, *Check folder* result) and everything drawn on the video (frame / jump / volume overlays, save / loop / new-video messages, the native-fullscreen subtitle cue, save errors returned by the server). Browser-console logs stay in English.

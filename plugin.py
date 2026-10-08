@@ -5,7 +5,8 @@ Current tools (modules):
     Shift + wheel = 10 frames, Ctrl + wheel = one short jump per notch; by default
     only while fullscreen), by dragging on the video with the left button (8 px =
     one frame) or with the keyboard (S / A = next / previous frame,
-    W / Q = jump forward / back), also in fullscreen.
+    W / Q = jump forward / back), also in fullscreen. Wrap (default on): past the last
+    frame continues at the first and before the first at the last (drag, wheel, keys).
   * volume: click-and-hold on the video and drag vertically = volume (up = louder).
   * new_video: in fullscreen, a newly generated video doesn't replace the one you watch.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
@@ -41,7 +42,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.2"
+PLUGIN_VERSION = "1.4.3"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -107,6 +108,14 @@ _TEXT = {
     "drag_hide_cursor_info": ("Only in fullscreen and only while you hold the left button (frames or volume). In any other case the cursor never disappears.",
                               "Solo a pantalla completa y solo mientras mantienes pulsado el botón izquierdo (fotogramas o "
                               "volumen). En cualquier otro caso el cursor nunca desaparece."),
+    "wrap": ("Wrap around at the ends (after the last frame comes the first)",
+             "Dar la vuelta en los extremos (tras el último fotograma viene el primero)"),
+    "wrap_info": ("Dragging, the wheel, A / S and Q / W: going past the last frame continues at the first one, and going back past the first "
+                  "continues at the last one, as many times as you like in one drag. Off = stop at the first / last frame. "
+                  "The A-B segment loop is not affected.",
+                  "Al arrastrar, con la rueda, A / S y Q / W: al pasar del último fotograma se sigue por el primero, y al retroceder antes "
+                  "del primero se sigue por el último, tantas vueltas como quieras en un mismo arrastre. Desactivado = se para en el "
+                  "primer / último fotograma. No afecta al bucle del segmento A-B."),
     # volume
     "sec_volume": ("### Volume\nClick on the video, hold and drag **vertically**: up = louder, down = quieter. "
                    "Dragging horizontally still steps frames: the direction is decided in the first 4 px (whichever moves more) and kept "
@@ -283,6 +292,8 @@ DEFAULT_SETTINGS = {
         "drag_pointer_lock": True,  # Pointer Lock while scrubbing horizontally with the LEFT button in fullscreen only:
                                     # no screen edge (Chrome shows its "press Esc" banner); released on button up / blur / Esc
         "drag_hide_cursor": True,   # hide the cursor while the LEFT button is held during a drag in fullscreen only
+        "wrap": True,               # past the last frame -> frame 0, before frame 0 -> last frame (drag, wheel, keys, jumps);
+                                    # False = clamp at the first / last frame (<= 1.4.2 behaviour)
         "jump_mode": "seconds",     # "seconds": jump_seconds converted with the video fps, "frames": jump_frames
         "jump_seconds": 0.5,
         "jump_frames": 8,
@@ -579,6 +590,9 @@ class VidosserPlugin(WAN2GPPlugin):
                 drag_hide_cursor = loc(gr.Checkbox(label=T("drag_hide_cursor"), value=current("frame_step", "drag_hide_cursor"),
                                                    elem_id="vidosser_drag_hide_cursor", info=T("drag_hide_cursor_info")),
                                        label="drag_hide_cursor", info="drag_hide_cursor_info")
+            with gr.Row():
+                wrap = loc(gr.Checkbox(label=T("wrap"), value=current("frame_step", "wrap"), elem_id="vidosser_wrap", info=T("wrap_info")),
+                           label="wrap", info="wrap_info")
         with gr.Group():
             loc(gr.Markdown(T("sec_volume"), elem_id="vidosser_sec_volume"), value="sec_volume")
             with gr.Row():
@@ -665,7 +679,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -699,7 +713,7 @@ class VidosserPlugin(WAN2GPPlugin):
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
-                  "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify")
+                  "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -717,7 +731,7 @@ class VidosserPlugin(WAN2GPPlugin):
                          drag_hide_cursor=True, drag_pointer_lock=True,
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
-                         no_autojump=True, jump_on_exit=True, new_notify=True, lang="en"):
+                         no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True, lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -761,7 +775,7 @@ class VidosserPlugin(WAN2GPPlugin):
             notes.append(tr("msg_shift_note", lang, n=shift_frames))
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
                                       drag_invert=bool(drag_invert), drag_button=drag_button,
-                                      drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock))
+                                      drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock), wrap=bool(wrap))
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)

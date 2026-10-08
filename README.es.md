@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.2
+*[English](README.md)* · Licencia MIT · versión 1.4.3
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -26,6 +26,7 @@ Arrastrando sobre el vídeo:
 Con el teclado (teclas configurables en la pestaña **Vidosser**):
 - **A = fotograma anterior**, **S = fotograma siguiente** (1 fotograma por pulsación; si mantienes la tecla, sigue avanzando fotograma a fotograma).
 - **Q = salto atrás**, **W = salto adelante**: por defecto **0,5 segundos** (8 fotogramas a 16 fps, 12 a 24 fps). También se puede fijar un número de fotogramas.
+- **Dar la vuelta en los extremos** (activado por defecto): al pasar del último fotograma se sigue por el primero, y al retroceder antes del primero se sigue por el último — al arrastrar, con la rueda, A / S y Q / W (y modificador + rueda). El indicador muestra el fotograma al que llegas con una marca ↻. Desactivado = se para en los extremos. Independiente del bucle del segmento A-B.
 - Las teclas actúan sobre: el vídeo a pantalla completa, si lo hay; si no, el vídeo que está bajo el ratón; si no, el último vídeo que has usado y sigue visible en pantalla. Si no hay ninguno, la tecla no hace nada.
 - **No hacen nada mientras escribes** en un cuadro de texto (el prompt, etc.), ni con Ctrl, Alt o Cmd pulsados (los atajos Alt+S/R/U/F de WanGP siguen funcionando).
 
@@ -90,7 +91,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
-- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar y ocultar el cursor mientras arrastras.
+- **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar, ocultar el cursor mientras arrastras y dar la vuelta en los extremos.
 - **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
 - **Volumen**: arrastrar en vertical = volumen, píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
 - **Bucle**: repetir todos los vídeos en bucle.
@@ -121,7 +122,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.2.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.3.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -183,6 +184,7 @@ Sección `frame_step`:
 | `drag_button` | `"left"` | `"left"` (izquierdo) o `"right"` (derecho) |
 | `drag_pointer_lock` | true | bloquear el puntero al pasar fotogramas, solo a pantalla completa con el botón izquierdo (Chrome muestra «Pulsa Esc para mostrar el cursor») |
 | `drag_hide_cursor` | true | ocultar el cursor mientras arrastras, solo a pantalla completa con el botón izquierdo pulsado |
+| `wrap` | true | dar la vuelta en los extremos (tras el último → primero, antes del primero → último; arrastre, rueda, teclas, saltos); `false` = parar en los extremos |
 | `jump_mode` | `"seconds"` | `"seconds"` (usa `jump_seconds`) o `"frames"` (usa `jump_frames`) |
 | `jump_seconds` | 0.5 | salto en segundos (se redondea al fotograma más cercano) |
 | `jump_frames` | 8 | salto en fotogramas (si `jump_mode` es `"frames"`) |
