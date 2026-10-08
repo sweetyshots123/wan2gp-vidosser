@@ -359,10 +359,52 @@
 
         // ------------------------------------------------------- overlay
         let overlay = null, overlayTimer = 0;
+        // Native <video> fullscreen: no element can be drawn above the video, but its own
+        // text tracks are. A "subtitles" track labelled "Vidosser" is added on first use and
+        // shows the message as a cue at the top-left (style: ::cue below); its captions
+        // button is hidden on videos that had no captions of their own.
+        const osd = new WeakMap();
+        const osdCss = document.createElement("style");
+        osdCss.textContent = "video.vidosser-osd::cue{background:rgba(0,0,0,.7);color:#fff;font:600 24px/1.3 ui-monospace,Consolas,monospace}" +
+            "video.vidosser-osd::-webkit-media-controls-toggle-closed-captions-button{display:none!important}";
+        (document.head || document.documentElement).appendChild(osdCss);
+        function clearOsd(video) {
+            const o = video && osd.get(video);
+            if (!o) return;
+            clearTimeout(o.timer);
+            if (o.cue) { try { o.track.removeCue(o.cue); } catch (_) { /* gone */ } o.cue = null; }
+            o.track.mode = "hidden";
+        }
+        function nativeOsd(video, text) {
+            let o = osd.get(video);
+            if (!o) {
+                const own = [...video.textTracks].some(t => t.kind === "subtitles" || t.kind === "captions");
+                let track;
+                try { track = video.addTextTrack("subtitles", "Vidosser", ""); } catch (_) { return; }
+                o = { track, cue: null, timer: 0, own };
+                osd.set(video, o);
+            }
+            if (!o.own) video.classList.add("vidosser-osd");
+            const Cue = window.VTTCue;
+            if (!Cue) return;
+            clearTimeout(o.timer);
+            if (o.cue) { try { o.track.removeCue(o.cue); } catch (_) { /* gone */ } }
+            const cue = new Cue(0, 1e9, text);
+            try { cue.line = 0; cue.align = "start"; cue.position = 2; cue.positionAlign = "line-left"; } catch (_) { /* older engines */ }
+            o.track.mode = "showing";
+            o.track.addCue(cue); o.cue = cue;
+            // a video never played since it was loaded still shows its "poster" state, in which
+            // cues are not activated: a seek to the same time ends that state (same frame)
+            if (video.paused && !video.seeking && video.played.length === 0 && video.readyState >= 1) {
+                try { video.currentTime = video.currentTime; } catch (_) { /* ignore */ }
+            }
+            o.timer = setTimeout(() => clearOsd(video), CFG.overlay_ms);
+        }
+        document.addEventListener("fullscreenchange", () => { for (const v of document.querySelectorAll("video.vidosser-osd")) if (fsElement() !== v) clearOsd(v); });
         function showOverlay(video, text) {
             if (!CFG.show_overlay) return;
             const fs = fsElement();
-            if (fs === video) return;              // native <video> fullscreen: nothing can be drawn above it
+            if (fs === video) { nativeOsd(video, text); return; }   // native <video> fullscreen: shown as a text track cue
             const host = fs || document.body;
             if (!overlay) {
                 overlay = document.createElement("div");
@@ -894,9 +936,16 @@
         // vertical, ties = horizontal), and stays locked until the button is released. Up =
         // louder (volume.drag_invert), volume.drag_pixels_per_percent px per 1 %, clamped
         // 0..100 and re-anchored at the limits (moving back reacts at once). A volume drag
-        // does not pause the video; it uses the same pointer lock / hidden cursor / click
-        // swallowing as the scrub. Touch: a vertical swipe only while fullscreen (outside
-        // fullscreen it keeps scrolling the page).
+        // does not pause the video and swallows the click that ends it, like the scrub.
+        // Touch: a vertical swipe only while fullscreen (outside it keeps scrolling the page).
+        // Cursor (1.4.1): it is hidden ONLY while the LEFT mouse button is held during a drag
+        // in fullscreen; outside fullscreen and with the right button the drag uses pointer
+        // capture with a visible cursor. Pointer Lock is only used for a horizontal scrub
+        // (left button, fullscreen): the volume drag never locks, it reads clientY under
+        // pointer capture, because Chrome on Windows reports unreliable movementY / buttons
+        // under Pointer Lock (a jump of up to half the screen when the cursor is re-centred
+        // as the lock starts, buttons = 0 while the button is held), which slammed the volume
+        // to 0 % / 100 % or ended the drag at once. The screen gives far more than 0..100 %.
         const VOL = V.modules.volume;
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
@@ -924,7 +973,7 @@
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
             drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, lock: null, active: false, done: 0, type: e.pointerType, button,
-                     scrub, vol, axis: null, prevDy: 0, level: 0 };
+                     scrub, vol, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
         }
         // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
         // element, also inside a fullscreen container), on the capturing video and on the
@@ -933,7 +982,12 @@
         // window blur / tab hidden / fullscreen change / pointer lock lost / a move with no
         // button pressed (missed release).
         const cursorCss = document.createElement("style");
-        cursorCss.textContent = "html.vidosser-scrubbing,html.vidosser-scrubbing *,.vidosser-scrub-el,.vidosser-scrub-el *{cursor:none!important}";
+        // Chrome's native controls hide the cursor over a playing video when they fade out
+        // (inline cursor:none on the controls, also in fullscreen): keep it visible; the
+        // cursor only disappears while we scrub / change the volume (classes below).
+        cursorCss.textContent = "video::-webkit-media-controls{cursor:auto!important}" +
+            "html.vidosser-scrubbing,html.vidosser-scrubbing *,.vidosser-scrub-el,.vidosser-scrub-el *," +
+            "html.vidosser-scrubbing video::-webkit-media-controls{cursor:none!important}";
         document.head.appendChild(cursorCss);
         let hiddenOn = [];
         function hideCursor(v) {
@@ -947,11 +1001,13 @@
             document.documentElement.classList.remove("vidosser-scrubbing");
             document.querySelectorAll(".vidosser-scrub-el").forEach(el => el.classList.remove("vidosser-scrub-el"));
         }
-        // Pointer Lock (drag_pointer_lock, default on): the cursor disappears, can't hit the
+        // Pointer Lock (drag_pointer_lock, default on; horizontal scrub, left button, fullscreen
+        // only - see above): the cursor disappears, can't hit the
         // screen edge and movementX keeps flowing (Chrome shows its "press Esc" banner). If
         // the lock is refused, the drag continues with pointer capture + hidden cursor.
+        const SPIKE_PX = 60;                     // first moves around the lock start: bigger = the cursor re-centring, not the hand
         function startLock(d) {
-            d.lock = "pending";
+            d.lock = "pending"; d.lockMoves = 0;
             d.lockBase = d.dx; d.mv = 0;          // Chrome freezes clientX/Y as soon as the lock is requested: count movementX/Y from here
             d.lockBaseY = d.dy; d.mvY = 0;
             const fail = () => { if (drag === d && d.lock === "pending") { d.lock = "failed"; capture(d); } };
@@ -966,17 +1022,22 @@
         }
         document.addEventListener("pointerlockchange", () => {
             if (!drag) return;
-            if (document.pointerLockElement === drag.v) { if (drag.lock === "pending") drag.lock = "on"; }
+            if (document.pointerLockElement === drag.v) { if (drag.lock === "pending") { drag.lock = "on"; drag.lockMoves = 0; } }
             else if (drag.lock === "on") endDrag("lock lost");            // Esc / focus loss ended the lock
         });
         document.addEventListener("pointerlockerror", () => { if (drag && drag.lock === "pending") { drag.lock = "failed"; capture(drag); } });
 
         function onDragMove(e) {
             if (!drag || e.pointerId !== drag.id) return;
-            if (drag.active && e.buttons === 0 && e.pointerType === "mouse") { endDrag("no button"); return; }   // release was missed
-            if (drag.lock === "on" || drag.lock === "pending") {
-                drag.mv += e.movementX || 0; drag.dx = drag.lockBase + drag.mv;
-                drag.mvY += e.movementY || 0; drag.dy = drag.lockBaseY + drag.mvY;
+            const locked = drag.lock === "on" || drag.lock === "pending";
+            // release was missed (not under Pointer Lock: Chrome on Windows reports buttons = 0 there while the button is held)
+            if (drag.active && !locked && e.buttons === 0 && e.pointerType === "mouse") { endDrag("no button"); return; }
+            if (locked) {
+                let mx = e.movementX || 0, my = e.movementY || 0;
+                if (drag.lockMoves < 3 && Math.max(Math.abs(mx), Math.abs(my)) > SPIKE_PX) { mx = 0; my = 0; }   // cursor re-centred as the lock starts
+                drag.lockMoves++;
+                drag.mv += mx; drag.dx = drag.lockBase + drag.mv;
+                drag.mvY += my; drag.dy = drag.lockBaseY + drag.mvY;
             } else { drag.dx = e.clientX - drag.x0; drag.dy = e.clientY - drag.y0; }
             const dx = drag.dx, dy = drag.dy;
             if (!drag.active) {
@@ -987,9 +1048,12 @@
                 if (axis === "y" ? !(drag.vol && fsTouch) : !drag.scrub) { drag = null; return; }   // not ours
                 drag.axis = axis;
                 drag.active = true;
-                if (CFG.drag_pointer_lock !== false && e.pointerType === "mouse" && drag.v.requestPointerLock) startLock(drag);
+                // hidden cursor / Pointer Lock: only a held LEFT mouse button, only in fullscreen
+                const fs = core.fsElement();
+                drag.hide = e.pointerType === "mouse" && drag.button === 0 && !!(fs && (fs === drag.v || fs.contains(drag.v)));
+                if (drag.hide && axis === "x" && CFG.drag_pointer_lock !== false && drag.v.requestPointerLock) startLock(drag);
                 else capture(drag);
-                if (CFG.drag_hide_cursor !== false) hideCursor(drag.v);
+                if (drag.hide && CFG.drag_hide_cursor !== false) hideCursor(drag.v);
                 if (axis === "x") { if (!drag.v.paused) drag.v.pause(); }
                 else drag.level = VOL.level(drag.v);                      // muted counts as 0 %: raising starts from silence
             }
@@ -1064,6 +1128,8 @@
         window.addEventListener("blur", () => endDrag("blur", false));
         document.addEventListener("visibilitychange", () => { if (document.hidden) endDrag("hidden", false); });
         document.addEventListener("fullscreenchange", () => { if (drag && drag.active) endDrag("fullscreenchange", false); });
+        // backup release under Pointer Lock (pointerup normally ends the drag first)
+        window.addEventListener("mouseup", e => { if (drag && drag.type === "mouse" && e.button === drag.button && drag.lock) endDrag("mouseup"); }, true);
         window.addEventListener("click", swallowClick, true);
         window.addEventListener("selectstart", blockWhileDragging, true);
         window.addEventListener("dragstart", blockWhileDragging, true);
@@ -1109,8 +1175,8 @@
         drag_pixels_per_frame: 8,
         drag_invert: false,           // false: drag right = forward
         drag_button: "left",          // "left" | "right"
-        drag_pointer_lock: true,      // Pointer Lock while scrubbing (Chrome shows its "press Esc" banner)
-        drag_hide_cursor: true,       // hide the cursor while scrubbing (fallback without pointer lock)
+        drag_pointer_lock: true,      // Pointer Lock while scrubbing, left button, fullscreen only (Chrome shows its "press Esc" banner)
+        drag_hide_cursor: true,       // hide the cursor while the left button is held during a drag, fullscreen only
         jump_mode: "seconds",     // "seconds" | "frames"
         jump_seconds: 0.5,
         jump_frames: 8,

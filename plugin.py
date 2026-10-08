@@ -38,7 +38,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.0"
+PLUGIN_VERSION = "1.4.1"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -85,9 +85,9 @@ DEFAULT_SETTINGS = {
         "drag_pixels_per_frame": 8, # horizontal pixels per frame while dragging (1..200)
         "drag_invert": False,       # False: drag right = forward, drag left = backward
         "drag_button": "left",      # "left" | "right" (right: the context menu opens only for a plain right click)
-        "drag_pointer_lock": True,  # Pointer Lock while scrubbing: hidden cursor, no screen edge (Chrome shows its
-                                    # "press Esc" banner); released on button release / blur / Esc
-        "drag_hide_cursor": True,   # hide the cursor while scrubbing (fallback when pointer lock is off or refused)
+        "drag_pointer_lock": True,  # Pointer Lock while scrubbing horizontally with the LEFT button in fullscreen only:
+                                    # no screen edge (Chrome shows its "press Esc" banner); released on button up / blur / Esc
+        "drag_hide_cursor": True,   # hide the cursor while the LEFT button is held during a drag in fullscreen only
         "jump_mode": "seconds",     # "seconds": jump_seconds converted with the video fps, "frames": jump_frames
         "jump_seconds": 0.5,
         "jump_frames": 8,
@@ -350,16 +350,19 @@ class VidosserPlugin(WAN2GPPlugin):
             with gr.Row():
                 drag_pointer_lock = gr.Checkbox(label="Bloquear el puntero al arrastrar (sin tope en el borde de la pantalla)",
                                                 value=current("frame_step", "drag_pointer_lock"), elem_id="vidosser_drag_pointer_lock",
-                                                info="El cursor desaparece y el arrastre no se detiene en el borde de la pantalla. Chrome muestra arriba "
-                                                     "su aviso «Pulsa Esc para mostrar el cursor»: es normal. Al soltar el botón, Esc o cambiar de ventana "
-                                                     "el puntero se libera.")
+                                                info="Solo a pantalla completa, al pasar fotogramas con el botón izquierdo pulsado: el arrastre no se "
+                                                     "detiene en el borde de la pantalla. Chrome muestra arriba su aviso «Pulsa Esc para mostrar el "
+                                                     "cursor»: es normal. Al soltar el botón, Esc o cambiar de ventana el puntero se libera. Fuera de "
+                                                     "la pantalla completa nunca se bloquea.")
                 drag_hide_cursor = gr.Checkbox(label="Ocultar el cursor mientras arrastras", value=current("frame_step", "drag_hide_cursor"),
                                                elem_id="vidosser_drag_hide_cursor",
-                                               info="Se usa cuando el bloqueo del puntero está desactivado o el navegador lo rechaza.")
+                                               info="Solo a pantalla completa y solo mientras mantienes pulsado el botón izquierdo (fotogramas o "
+                                                    "volumen). En cualquier otro caso el cursor nunca desaparece.")
         with gr.Group():
             gr.Markdown("### Volumen\nHaz clic sobre el vídeo, mantén pulsado y arrastra **en vertical**: hacia arriba sube el volumen, hacia abajo lo baja. "
                         "Arrastrar en horizontal sigue pasando fotogramas: la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene "
-                        "hasta que sueltas. Usa el mismo botón, el bloqueo del puntero y el cursor oculto que el arrastre de fotogramas.")
+                        "hasta que sueltas. Usa el mismo botón que el arrastre de fotogramas; a pantalla completa, con el botón izquierdo, el cursor "
+                        "se oculta mientras arrastras (sin bloqueo del puntero).")
             with gr.Row():
                 drag_volume = gr.Checkbox(label="Arrastrar en vertical = volumen", value=current("volume", "drag_volume"), elem_id="vidosser_drag_volume",
                                           info="Un clic o un doble clic sin arrastrar hacen lo de siempre. Si el vídeo está silenciado, al subir se activa el sonido. "

@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.0
+*[English](README.md)* · Licencia MIT · versión 1.4.1
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -16,7 +16,8 @@ Con la rueda del ratón:
 Arrastrando sobre el vídeo:
 - **Mantén pulsado el botón izquierdo (o el derecho, según «Botón para arrastrar») sobre un vídeo y arrastra en horizontal**: cada 8 píxeles = 1 fotograma (configurable); a la derecha = adelante, a la izquierda = atrás. La cuenta va por posición y es exacta: si vuelves al punto de partida, vuelves al mismo fotograma.
 - Empieza solo tras 4 píxeles de movimiento sobre todo horizontal, así que **un clic normal sigue pausando / reproduciendo**. Si el vídeo se está reproduciendo, se pausa al empezar a arrastrar, y el clic del final del arrastre no lo vuelve a poner en marcha. Con el **botón derecho**, un clic derecho normal sigue abriendo el menú contextual; el menú solo se bloquea si de verdad has arrastrado.
-- Mientras arrastras, el ratón queda **bloqueado y oculto** (Pointer Lock, «Bloquear el puntero al arrastrar», activado por defecto): el puntero no choca con el borde de la pantalla, así que puedes seguir avanzando en un solo movimiento largo, y al soltar reaparece donde estaba. Chrome/Edge muestran cada vez arriba su aviso «Pulsa Esc para mostrar el cursor»: es un aviso de seguridad del navegador y desaparece solo. El bloqueo se suelta siempre al soltar el botón, al pulsar **Esc** o al cambiar de ventana. Si el bloqueo está desactivado o el navegador lo rechaza, el arrastre sigue funcionando aunque el ratón salga del vídeo y el cursor solo se oculta mientras arrastras («Ocultar el cursor mientras arrastras», activado por defecto); vuelve siempre al soltar, con Esc, si se cancela o si la ventana pierde el foco.
+- **El cursor solo desaparece a pantalla completa y solo mientras mantienes pulsado el botón izquierdo** arrastrando (fotogramas o volumen); fuera de la pantalla completa, con el botón derecho, al soltar o sin arrastrar, el cursor siempre se ve (fuera de la pantalla completa el arrastre sigue funcionando aunque el ratón salga del vídeo). Vidosser también evita que Chrome esconda el cursor por su cuenta cuando sus controles se apagan sobre un vídeo en marcha.
+- A pantalla completa, al pasar fotogramas con el botón izquierdo, el ratón queda **bloqueado y oculto** (Pointer Lock, «Bloquear el puntero al arrastrar», activado por defecto): el puntero no choca con el borde de la pantalla, así que puedes seguir avanzando en un solo movimiento largo, y al soltar reaparece donde estaba. Chrome/Edge muestran cada vez arriba su aviso «Pulsa Esc para mostrar el cursor»: es un aviso de seguridad del navegador y desaparece solo. El bloqueo se suelta siempre al soltar el botón, al pulsar **Esc** o al cambiar de ventana. Si el bloqueo está desactivado o el navegador lo rechaza, el arrastre sigue funcionando aunque el ratón salga del vídeo y el cursor solo se oculta mientras arrastras («Ocultar el cursor mientras arrastras», activado por defecto); vuelve siempre al soltar, con Esc, si se cancela o si la ventana pierde el foco.
 - **Shift + arrastrar** = 10 fotogramas por paso; **Ctrl + arrastrar** (el modificador del salto corto) = un salto corto por paso.
 - Funciona dentro y fuera de la pantalla completa (no depende de «Rueda solo a pantalla completa») y con el dedo en pantallas táctiles (deslizar en horizontal; en vertical sigue desplazando la página, salvo a pantalla completa, donde cambia el volumen).
 - **Arrastrar en vertical = volumen** (ver [Volumen](#volumen-volume)): la dirección se decide en los primeros 4 px según hacia dónde te muevas más (horizontal = fotogramas, vertical = volumen; si empatan, horizontal) y se mantiene hasta que sueltas el botón, así que un arrastre de fotogramas no cambia el volumen aunque se tuerza, y al revés.
@@ -41,8 +42,8 @@ En general:
 - Un indicador muestra el volumen mientras arrastras: «Volumen ██████░░░░  60 %» («0 % (silencio)» abajo del todo).
 - Va de 0 % a 100 %. Si te pasas de un extremo y vuelves, el volumen cambia en cuanto das la vuelta (no hay que deshacer lo que te pasaste).
 - Si el vídeo está **silenciado**, al subir se quita el silencio y empieza desde 0 %.
-- No pausa el vídeo (el arrastre de fotogramas sí). Usa el mismo botón que el arrastre de fotogramas («Botón para arrastrar»), el mismo **bloqueo del puntero y cursor oculto**, y el clic del final del arrastre no pausa ni reproduce. Un clic normal y el **doble clic** (pantalla completa) siguen igual que antes.
-- Funciona dentro y fuera de la pantalla completa (la de Vidosser y la nativa del vídeo; en la nativa no se ve el indicador). En pantallas táctiles, deslizar en vertical cambia el volumen **solo a pantalla completa**; fuera de ella sigue desplazando la página.
+- No pausa el vídeo (el arrastre de fotogramas sí). Usa el mismo botón que el arrastre de fotogramas («Botón para arrastrar»); a pantalla completa, con el botón izquierdo, el cursor se oculta mientras arrastras, pero **sin bloqueo del puntero** (en Windows, Chrome da movimientos poco fiables con el puntero bloqueado; para el volumen sobra recorrido de pantalla). El clic del final del arrastre no pausa ni reproduce. Un clic normal y el **doble clic** (pantalla completa) siguen igual que antes.
+- Funciona dentro y fuera de la pantalla completa: la de Vidosser (doble clic), la de la galería y la nativa del vídeo. En la nativa el indicador se muestra como un subtítulo arriba a la izquierda. En pantallas táctiles, deslizar en vertical cambia el volumen **solo a pantalla completa**; fuera de ella sigue desplazando la página.
 - **Recordar el volumen** (activado por defecto): el último volumen que pones (arrastrando o con la barra del vídeo) se usa en los vídeos que se cargan después, también al recargar la página (se guarda en este navegador). Nunca se recuerda el silencio.
 
 ## Vídeo nuevo a pantalla completa (`new_video`)
@@ -113,7 +114,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.0.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.1.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -173,8 +174,8 @@ Sección `frame_step`:
 | `drag_pixels_per_frame` | 8 | píxeles de arrastre por fotograma (1-200) |
 | `drag_invert` | false | `true` = arrastrar a la derecha retrocede |
 | `drag_button` | `"left"` | `"left"` (izquierdo) o `"right"` (derecho) |
-| `drag_pointer_lock` | true | bloquear el puntero al arrastrar (Chrome muestra «Pulsa Esc para mostrar el cursor») |
-| `drag_hide_cursor` | true | ocultar el cursor mientras arrastras (si el bloqueo está desactivado o falla) |
+| `drag_pointer_lock` | true | bloquear el puntero al pasar fotogramas, solo a pantalla completa con el botón izquierdo (Chrome muestra «Pulsa Esc para mostrar el cursor») |
+| `drag_hide_cursor` | true | ocultar el cursor mientras arrastras, solo a pantalla completa con el botón izquierdo pulsado |
 | `jump_mode` | `"seconds"` | `"seconds"` (usa `jump_seconds`) o `"frames"` (usa `jump_frames`) |
 | `jump_seconds` | 0.5 | salto en segundos (se redondea al fotograma más cercano) |
 | `jump_frames` | 8 | salto en fotogramas (si `jump_mode` es `"frames"`) |
@@ -223,7 +224,7 @@ Sección `save_frame`:
 
 ## Limitaciones
 
-- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: no se ven el indicador, los mensajes, el destello, la barra de progreso fina ni la del bucle; el guardado se confirma con el sonido. Chrome siempre muestra sus controles en un vídeo a pantalla completa nativa, así que Vidosser los oculta ahí con CSS (si «Ocultar la barra de controles» no está en «No»). Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
+- En la **pantalla completa nativa** del vídeo (el botón de pantalla completa de la barra de controles del navegador), la rueda, las teclas y el clic central funcionan, pero el navegador no deja dibujar nada encima: el indicador (fotograma, volumen, guardado, bucle) se muestra como un subtítulo arriba a la izquierda, pero no se ven los avisos grandes, el destello, la barra de progreso fina ni la del bucle; el guardado se confirma también con el sonido. Para el subtítulo Vidosser añade al vídeo una pista de subtítulos «Vidosser» (oculta el botón de subtítulos de Chrome en ese vídeo si no tenía subtítulos propios). Chrome siempre muestra sus controles en un vídeo a pantalla completa nativa, así que Vidosser los oculta ahí con CSS (si «Ocultar la barra de controles» no está en «No»). Usa el doble clic en el vídeo (con «Pantalla completa del vídeo con indicadores y mensajes» activado) o el botón de pantalla completa de la **galería** (arriba a la derecha).
 - El bucle A-B vuelve al inicio justo antes de que se vea el fotograma siguiente al final. Es exacto al fotograma en Chrome/Edge (probado a 16 y 24 fps); con el equipo muy cargado o en navegadores sin `requestVideoFrameCallback` puede colarse algún fotograma de más antes de volver.
 - El arrastre para pasar fotogramas usa el botón elegido sobre la imagen del vídeo; la barra de progreso nativa funciona como siempre. En pantallas táctiles se ha probado con táctil emulado en Chrome, no en un móvil o tableta real.
 - Arrastrar con el botón derecho: en **Windows** el menú contextual se abre al soltar, así que tras un arrastre simplemente no aparece. En **macOS y Linux** el navegador abre el menú nada más pulsar el botón derecho, así que ahí normalmente no se puede arrastrar con él: usa el izquierdo.
@@ -237,5 +238,5 @@ Sección `save_frame`:
 - JPG comprime con pérdida; para un fotograma idéntico al original usa PNG.
 - En macOS la aceleración de la rueda del sistema puede hacer que un giro rápido cuente más muescas.
 - Las teclas se comparan por el carácter que producen (`a`, `s`...), no por su posición en el teclado.
-- Volumen: el indicador no se ve en la pantalla completa nativa del vídeo (el volumen sí cambia). «Recordar el volumen» se guarda en el navegador, no en `settings.json`.
+- «Recordar el volumen» se guarda en el navegador, no en `settings.json`.
 - Vídeo nuevo a pantalla completa: funciona con la galería de vídeos generados de WanGP (vídeo nuevo sustituyendo a un vídeo). Si lo nuevo es una **imagen**, la galería cambia el reproductor por una imagen y eso no se puede evitar. Si el vídeo que ves sale de la lista visible de la galería (por ejemplo, con el límite de archivos de la galería de WanGP), se aplica el cambio.
