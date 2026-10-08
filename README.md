@@ -1,12 +1,12 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.1
+*[Español](README.es.md)* · MIT License · v1.4.2
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
 It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survives WanGP updates.
 
-> The plugin's own UI text (settings tab, on-screen messages) is currently in Spanish. This README shows each Spanish label with its English meaning.
+> **Language:** all of Vidosser's on-screen text (settings tab, overlays, messages) is in **English or Spanish, following your browser's language**: Spanish when the browser's first language is any Spanish variant (`es`, `es-ES`, `es-MX`, …), English for every other language. See [Language](#language).
 
 ## Features
 
@@ -28,21 +28,21 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - File name: `<video name>_frame<NNNNN>.png`, e.g. `my_video_frame00023.png`.
 - **Ask mode** (default): opens the browser's *Save as* dialog, starting in the last folder used. Cancel saves nothing.
 - **Direct mode**: no dialog; saves into a folder on the machine running WanGP (default `<WanGP outputs>/frames`, created if missing). It **never overwrites**: existing names get `_1`, `_2`… The message shows the full saved path.
-- **Clear feedback** on every save: a large message at the bottom of the screen, *Fotograma guardado (frame N): name* (green, 2.5 s, fades out; full path in direct mode; in ask mode it appears once the *Save as* dialog is closed), a short white flash over the video and a camera-shutter sound. Errors show a red message and a low double beep; a cancelled dialog shows a grey *No guardado (cancelado)* message. While a container is fullscreen the message is drawn inside it, so it is visible there too. Each of these can be switched off; the sound volume is adjustable.
+- **Clear feedback** on every save: a large message at the bottom of the screen, *Frame saved (frame N): name* (green, 2.5 s, fades out; full path in direct mode; in ask mode it appears once the *Save as* dialog is closed), a short white flash over the video and a camera-shutter sound. Errors show a red message and a low double beep; a cancelled dialog shows a grey *Not saved (cancelled)* message. While a container is fullscreen the message is drawn inside it, so it is visible there too. Each of these can be switched off; the sound volume is adjustable.
 
 **Volume by vertical drag** (`volume`)
 - **Click and hold on the video and drag vertically**: **up = louder, down = quieter**. 2 px = 1 % by default (200 px from 0 % to 100 %), configurable; the direction can be inverted.
-- An overlay shows the level while dragging: `Volumen ██████░░░░  60 %` (`0 % (silencio)` at the bottom).
+- An overlay shows the level while dragging: `Volume ██████░░░░  60 %` (`0 % (muted)` at the bottom).
 - Clamped to 0–100 %; if you overshoot a limit and come back, the volume reacts as soon as you turn around.
 - On a **muted** video, dragging up unmutes it and starts from 0 %.
 - It doesn't pause the video (scrubbing does). It uses the same button as drag-to-scrub (*drag button*); in fullscreen with the left button the cursor is hidden while you drag, but **without pointer lock** (Chrome on Windows reports unreliable movement under the lock, and the screen gives plenty of travel for 0–100 %). The click that ends the drag doesn't toggle play. A plain click and the **double-click** (fullscreen) behave exactly as before.
 - Works inside and outside fullscreen: Vidosser's fullscreen (double-click), the gallery's fullscreen button and the video's native fullscreen, where the overlay is shown as a subtitle line at the top left. On touch screens a vertical swipe changes the volume **only in fullscreen**; outside fullscreen it keeps scrolling the page.
-- *Recordar el volumen* (*remember the volume*, on by default): the last volume you set (by dragging or with the video's own slider) is applied to videos loaded later, also after a page reload (stored in the browser). Muting is never remembered.
+- *Remember the volume for the next videos* (on by default): the last volume you set (by dragging or with the video's own slider) is applied to videos loaded later, also after a page reload (stored in the browser). Muting is never remembered.
 
 **New video while fullscreen** (`new_video`)
-- When WanGP finishes a video, the gallery jumps to it (if you were on the last item). **While you watch a gallery video fullscreen** (Vidosser's container fullscreen, the gallery's own fullscreen or the video's native fullscreen), *A pantalla completa, no saltar al vídeo nuevo* (*in fullscreen, don't jump to the new video*, on by default) **keeps the video you are watching**: same position, still paused or playing, still fullscreen, not even reloaded. The new video is added to the gallery as usual and a message says *Nuevo vídeo listo (sigues viendo este)* (*new video ready, you keep watching this one*; not possible in native fullscreen).
+- When WanGP finishes a video, the gallery jumps to it (if you were on the last item). **While you watch a gallery video fullscreen** (Vidosser's container fullscreen, the gallery's own fullscreen or the video's native fullscreen), *In fullscreen, don't jump to the new video* (on by default) **keeps the video you are watching**: same position, still paused or playing, still fullscreen, not even reloaded. The new video is added to the gallery as usual and a message says *New video ready (you're still watching this one)* (not possible in native fullscreen).
 - **Outside fullscreen nothing changes**: WanGP jumps to the new video as before.
-- **When you leave fullscreen** the newest video is shown, which is what WanGP would have done (*Al salir de la pantalla completa, mostrar el vídeo nuevo*, on by default), so outside fullscreen the gallery keeps following new videos. With it off you stay on the video you were watching (and, as in WanGP whenever you're not on the last item, the gallery stops jumping until you pick the last one again).
+- **When you leave fullscreen** the newest video is shown, which is what WanGP would have done (*When leaving fullscreen, show the new video*, on by default), so outside fullscreen the gallery keeps following new videos. With it off you stay on the video you were watching (and, as in WanGP whenever you're not on the last item, the gallery stops jumping until you pick the last one again).
 - Your own navigation in fullscreen (thumbnails, arrow keys) is never blocked. If the video you watch disappears from the gallery (deleted), the change is applied.
 - How it works: Gradio's gallery keeps the same `<video>` element and only changes its `src`; while that video is fullscreen Vidosser refuses that one change and then re-selects the video on screen in the gallery, so Gradio and WanGP's own selection (`select_media`) match what you see and later refreshes keep it.
 
@@ -51,14 +51,14 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - The fullscreen button **inside the browser's own control bar** of a video can't be intercepted by a web page, so it stays native; there the save is confirmed by the sound.
 
 **Hide the control bar** (`hide_controls`, *only in fullscreen* by default)
-- *Ocultar la barra de controles del vídeo* (*hide the video control bar*): *No* (off), *Solo a pantalla completa* (only in fullscreen, default) or *Siempre* (always). Hidden bars are the browser's own `<video>` controls (also in native fullscreen) and WanGP's video player bar in fullscreen; they come back when you leave fullscreen or switch the option off.
+- *Hide the video control bar*: *No*, *Only in fullscreen* (default) or *Always*. Hidden bars are the browser's own `<video>` controls (also in native fullscreen) and WanGP's video player bar in fullscreen; they come back when you leave fullscreen or switch the option off.
 - Without the bar: **click** the video or press **Space** to play/pause, and the **whole picture** can be dragged to scrub (no 40 px exclusion).
-- *Barra de progreso fina* (*thin progress bar*, `show_thin_progress`, on by default): a 3 px, non-clickable line at the very bottom of the picture shows the position while the controls are hidden.
+- *Thin progress bar* (`show_thin_progress`, on by default): a 3 px, non-clickable line at the very bottom of the picture shows the position while the controls are hidden.
 
 **Loop**
-- **L** turns looping on/off for the current video. *Repetir todos los vídeos en bucle* (*loop all videos*, on by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
+- **L** turns looping on/off for the current video. *Loop all videos* (on by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
 - **A-B segment**: **I** marks the start (in) and **O** the end (out) at the current frame; playback then repeats exactly frames in…out (frame-accurate, using `requestVideoFrameCallback`), also when out is the last frame. Marking out before in swaps them; moving one end past the other end of an existing segment starts a new segment. **U** clears the segment. Pressing play outside the segment starts at in. Frame stepping is never restricted to the segment.
-- Segments are per video (by file) and kept while the page is open. A thin (3 px) orange line on the top edge of the picture shows the segment's position in the clip, so nothing covers the bottom of the picture. Messages confirm each action: *Inicio de bucle: frame N*, *Final de bucle: frame N*, *Bucle borrado*.
+- Segments are per video (by file) and kept while the page is open. A thin (3 px) orange line on the top edge of the picture shows the segment's position in the clip, so nothing covers the bottom of the picture. Messages confirm each action: *Loop start: frame N*, *Loop end: frame N*, *Loop cleared*.
 
 **Settings tab**: every option is editable in a **Vidosser** tab and applies instantly, with no restart.
 
@@ -88,54 +88,63 @@ Middle clicks on links, buttons, gallery thumbnails and the rest of the page beh
 
 ## Settings (Vidosser tab)
 
-Open the **Vidosser** tab in WanGP, change options, and click **Guardar ajustes** (*Save settings*). Values are validated (duplicate keys, number ranges, folder writable). If anything is invalid, nothing is saved and the reason is shown. Valid settings are written to `settings.json` in the plugin folder and **applied immediately** in that browser tab. Other already-open WanGP tabs pick them up when reloaded.
+Open the **Vidosser** tab in WanGP, change options, and click **Save settings**. Values are validated (duplicate keys, number ranges, folder writable). If anything is invalid, nothing is saved and the reason is shown. Valid settings are written to `settings.json` in the plugin folder and **applied immediately** in that browser tab. Other already-open WanGP tabs pick them up when reloaded.
 
-| Section (Spanish label) | Option | Default | Meaning |
+| Section | Option | Default | Meaning |
 |---|---|---|---|
-| **Teclas** (Keys) | *Fotograma siguiente / anterior* (next / previous frame) | `S` / `A` | click the box and press the key you want (Backspace clears) |
-| | *Salto adelante / atrás* (jump forward / back) | `W` / `Q` | |
-| | *Guardar fotograma* (save frame) | `D` | |
-| | *Bucle on/off (este vídeo)* (loop on/off) | `L` | |
-| | *Inicio / Final del segmento A-B* (segment in / out) | `I` / `O` | |
-| | *Borrar segmento A-B* (clear segment) | `U` | |
-| | *Atajos de teclado activados* (keyboard shortcuts on) | on | |
-| **Paso de fotogramas** (Frame stepping) | *Rueda del ratón: 1 muesca = 1 fotograma* (wheel stepping) | on | |
-| | *Rueda solo a pantalla completa* (wheel only in fullscreen) | on | off = wheel steps over any video, also outside fullscreen |
-| | *Invertir sentido de la rueda* (invert wheel) | off | on = wheel up goes forward |
-| | *Fotogramas con Shift + rueda* (Shift + wheel frames) | 10 | also used by Shift + drag |
-| | *Arrastrar sobre el vídeo = pasar fotogramas* (drag to scrub) | on | inside and outside fullscreen |
-| | *Botón para arrastrar* (drag button) | *Izquierdo* (left) | or *Derecho* (right): plain right click = normal context menu |
-| | *Píxeles por fotograma al arrastrar* (pixels per frame) | 8 | 1–200 |
-| | *Invertir sentido al arrastrar* (invert drag) | off | on = drag right goes back |
-| | *Bloquear el puntero al arrastrar* (drag pointer lock) | on | fullscreen + left button scrub only: no screen edge; Chrome shows a *"Press Esc to show your cursor"* banner each time |
-| | *Ocultar el cursor mientras arrastras* (hide cursor while dragging) | on | only in fullscreen while the left button is held (scrub or volume) |
-| **Salto corto** (Short jump: W / Q and modifier + wheel) | *Salto corto: medida* (unit) | seconds | *En segundos* (seconds) or *En fotogramas* (frames) |
-| | *Salto corto: segundos* (seconds) | 0.5 | rounded to whole frames |
-| | *Salto corto: fotogramas* (frames) | 8 | |
-| | *Modificador + rueda = salto corto* (modifier) | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *Ninguno* (none = off). With Shift, Shift + wheel does the short jump instead of the ×10 multiplier (the tab shows a note) |
-| **Volumen** (Volume) | *Arrastrar en vertical = volumen* (vertical drag = volume) | on | up = louder; plain click / double-click unchanged |
-| | *Píxeles por 1 % de volumen* (pixels per 1 %) | 2 | 0.2–50 |
-| | *Invertir sentido del volumen* (invert volume drag) | off | on = drag down is louder |
-| | *Recordar el volumen para los siguientes vídeos* (remember the volume) | on | also after a page reload (stored in the browser) |
-| **Bucle** (Loop) | *Repetir todos los vídeos en bucle* (loop all videos) | on | applied live, also to videos added later |
-| **Vídeo nuevo** (New video) | *A pantalla completa, no saltar al vídeo nuevo* (in fullscreen, don't jump to the new video) | on | only while a gallery video is fullscreen; outside fullscreen WanGP jumps as usual |
-| | *Al salir de la pantalla completa, mostrar el vídeo nuevo* (show the new video when leaving fullscreen) | on | what WanGP would have done |
-| | *Aviso «Nuevo vídeo listo»* (new video message) | on | not possible in native fullscreen |
-| **Guardar fotograma** (Save frame) | *Formato* (format) | PNG | PNG or JPG |
-| | *Calidad JPG* (JPG quality) | 95 | 1–100 |
-| | *Modo* (mode) | ask | *Preguntar dónde guardar* (ask) or *Guardar directamente en la carpeta* (direct) |
-| | *Carpeta* (folder, direct mode) | empty = `<WanGP outputs>/frames` | on the machine running WanGP; **Comprobar carpeta** (*Check folder*) tests that it exists or can be created and is writable |
-| | *Clic central … = guardar fotograma* (middle click saves) | on | |
-| | *Mensaje «Fotograma guardado»* (save message) | on | |
-| | *Duración del mensaje (segundos)* (message duration) | 2.5 | 0.5–30 |
-| | *Destello blanco sobre el vídeo* (white flash) | on | |
-| | *Sonido de cámara al guardar* (shutter sound) | on | low double beep on errors |
-| | *Volumen* (volume) | 60 | 1–100 |
-| **Indicador y pantalla completa** (Overlay & fullscreen) | *Mostrar indicador sobre el vídeo* (show overlay) | on | |
-| | *Pantalla completa del vídeo con indicadores y mensajes* (fullscreen with overlays) | on | see *Fullscreen with overlays* above |
-| | *Ocultar la barra de controles del vídeo* (hide control bar) | *Solo a pantalla completa* | *No* / *Solo a pantalla completa* / *Siempre* |
-| | *Barra de progreso fina (3 px)* (thin progress bar) | on | shown only while the controls are hidden |
-| | *FPS si no se pueden detectar* (fallback fps) | 16 | used only if the frame rate can't be read |
+| **Keys** | *Next frame* / *Previous frame* | `S` / `A` | click the box and press the key you want (Backspace clears) |
+| | *Jump forward* / *Jump back* | `W` / `Q` | |
+| | *Save frame* | `D` | |
+| | *Loop on/off (this video)* | `L` | |
+| | *A-B segment start* / *end* | `I` / `O` | |
+| | *Clear A-B segment* | `U` | |
+| | *Keyboard shortcuts enabled* | on | |
+| **Frame stepping** | *Mouse wheel: 1 notch = 1 frame* | on | |
+| | *Wheel only in fullscreen* | on | off = wheel steps over any video, also outside fullscreen |
+| | *Invert wheel direction* | off | on = wheel up goes forward |
+| | *Frames with Shift + wheel* | 10 | also used by Shift + drag |
+| | *Drag on the video = step frames* | on | inside and outside fullscreen |
+| | *Drag button* | *Left* | or *Right*: plain right click = normal context menu |
+| | *Pixels per frame when dragging* | 8 | 1–200 |
+| | *Invert drag direction* | off | on = drag right goes back |
+| | *Lock the pointer while dragging* | on | fullscreen + left button scrub only: no screen edge; Chrome shows a *"Press Esc to show your cursor"* banner each time |
+| | *Hide the cursor while dragging* | on | only in fullscreen while the left button is held (scrub or volume) |
+| **Short jump** (W / Q and modifier + wheel) | *Short jump: unit* | seconds | *In seconds* or *In frames* |
+| | *Short jump: seconds* | 0.5 | rounded to whole frames |
+| | *Short jump: frames* | 8 | |
+| | *Modifier + wheel = short jump* | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *None* (off). With Shift, Shift + wheel does the short jump instead of the ×10 multiplier (the tab shows a note) |
+| **Volume** | *Vertical drag = volume* | on | up = louder; plain click / double-click unchanged |
+| | *Pixels per 1 % of volume* | 2 | 0.2–50 |
+| | *Invert volume direction* | off | on = drag down is louder |
+| | *Remember the volume for the next videos* | on | also after a page reload (stored in the browser) |
+| **Loop** | *Loop all videos* | on | applied live, also to videos added later |
+| **New video** | *In fullscreen, don't jump to the new video* | on | only while a gallery video is fullscreen; outside fullscreen WanGP jumps as usual |
+| | *When leaving fullscreen, show the new video* | on | what WanGP would have done |
+| | *«New video ready» message* | on | not possible in native fullscreen |
+| **Save frame** | *Format* | PNG | PNG or JPG |
+| | *JPG quality* | 95 | 1–100 |
+| | *Mode* | ask | *Ask where to save* or *Save straight into the folder* |
+| | *Folder* (direct mode) | empty = `<WanGP outputs>/frames` | on the machine running WanGP; **Check folder** tests that it exists or can be created and is writable |
+| | *Middle click (wheel click) on the video = save frame* | on | |
+| | *«Frame saved» message* | on | |
+| | *Message duration (seconds)* | 2.5 | 0.5–30 |
+| | *White flash over the video* | on | |
+| | *Camera sound when saving* | on | low double beep on errors |
+| | *Volume* | 60 | 1–100 |
+| **Overlay and fullscreen** | *Show overlay on the video* | on | |
+| | *Video fullscreen with overlays and messages* | on | see *Fullscreen with overlays* above |
+| | *Hide the video control bar* | *Only in fullscreen* | *No* / *Only in fullscreen* / *Always* |
+| | *Thin progress bar (3 px)* | on | shown only while the controls are hidden |
+| | *FPS when they can't be detected* | 16 | used only if the frame rate can't be read |
+
+With a Spanish browser the same tab is shown in Spanish (*Teclas*, *Paso de fotogramas*, *Guardar ajustes*…). The values stored in `settings.json` are the same in both languages.
+
+## Language
+
+- Vidosser shows **every on-screen text in English or Spanish**, picked from the **browser's language** (`navigator.languages[0]`, i.e. the first language in the browser's language settings): **Spanish for any `es-*`** (Spain, Mexico, Argentina, …), **English for everything else** (English is the default and the fallback). There is no setting for it: change the browser's preferred language and reload the page.
+- This covers the Vidosser tab (labels, help texts, section headers, dropdown / radio choices, buttons, validation and save messages, *Check folder* result) and everything drawn on the video (overlays, messages, the native-fullscreen subtitle line, save errors coming from the server).
+- WanGP itself has no UI language setting (its interface is in English) and Gradio 5.29, the version WanGP uses, has no translation API (`gr.I18n` only exists in newer Gradio versions), so Vidosser builds its tab in English and, in a Spanish browser, switches the tab's texts to Spanish right after the page loads (through a hidden button of the tab, like its other hidden controls). Only the displayed labels change: the values stored in `settings.json` (`"fullscreen"`, `"ctrl"`, `"ask"`…) are the same in both languages, so the same file works for both.
+- Not translated: browser messages (Chrome's *"Press Esc to show your cursor"*, the *Save as* dialog), Gradio's and WanGP's own texts, file names and paths, error details coming from the operating system or ffmpeg, the subtitle track name "Vidosser", and the browser-console logs (English).
 
 <details><summary><code>settings.json</code> structure (advanced)</summary>
 
@@ -174,7 +183,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.1.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.2.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -204,8 +213,8 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - Loop segments are kept only while the page is open (not saved to disk).
 - Drag to scrub uses the chosen button on the video picture, so the video's own drag gestures there (none in Chrome/Firefox by default) are replaced while it is on. Seeking with the native progress bar is unchanged. Touch scrubbing was tested with emulated touch in Chrome, not on a real phone/tablet.
 - Right-button drag: on **Windows** the context menu opens on release, so it is simply skipped after a drag. On **macOS and Linux** browsers open the context menu as soon as the right button is pressed, so a right-button drag usually isn't possible there: use the left button.
-- Pointer lock: Chrome/Edge show the *"Press Esc to show your cursor"* banner every time a drag starts the lock; browsers don't let a page hide it. Turn *Bloquear el puntero al arrastrar* off if it bothers you (the cursor is then only hidden, and the drag stops at the screen edge).
-- Ctrl + wheel and trackpad pinch: if you choose *Ninguno* (none) as the modifier, Ctrl + wheel zooms the browser as usual.
+- Pointer lock: Chrome/Edge show the *"Press Esc to show your cursor"* banner every time a drag starts the lock; browsers don't let a page hide it. Turn *Lock the pointer while dragging* off if it bothers you (the cursor is then only hidden, and the drag stops at the screen edge).
+- Ctrl + wheel and trackpad pinch: if you choose *None* as the modifier, Ctrl + wheel zooms the browser as usual.
 - The middle click saves when you release the button. In ask mode, if the button is held for more than about 5 seconds, the browser no longer allows the *Save as* dialog and the frame is downloaded instead.
 - Direct mode saves on the machine running WanGP. If you use WanGP from another computer over the network, the file lands on the server.
 - JPG is lossy; use PNG for a bit-exact frame.
@@ -213,24 +222,24 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - Keys match the character they type (`a`, `s`…), not the physical key position.
 - *Remember the volume* is stored in the browser (localStorage), not in `settings.json`.
 - New video while fullscreen: made for WanGP's output gallery when the new item is a video. If the new item is an **image**, Gradio replaces the video player with an image and that can't be prevented. If the video you watch leaves the gallery's visible list (deleted, or pushed out by WanGP's gallery file limit), the change is applied.
-- The UI text is Spanish for now.
 
 ## Troubleshooting
 
-- **Middle click does nothing:** many mouse utilities (Logitech Options/G HUB, Razer Synapse, etc.) can remap the wheel click to another function, in which case the browser never receives a middle click. Set it back to "Middle click" for the browser, and check that *Clic central … = guardar fotograma* is enabled in the Vidosser tab.
-- **No overlay or messages in fullscreen:** you are in native video fullscreen (see Limitations). Double-click the video instead, or use the gallery's fullscreen button. Check that *Pantalla completa del vídeo con indicadores y mensajes* is on.
-- **Ctrl + wheel zooms the page:** that's expected outside fullscreen when *Rueda solo a pantalla completa* is on, or when the pointer isn't over a video with it off.
-- **Dragging on a video doesn't scrub / a click doesn't pause any more:** check *Arrastrar sobre el vídeo* in the Vidosser tab; a movement under 4 px counts as a click, more than that as a drag.
-- **A banner "Press Esc to show your cursor" appears when I drag:** that is the browser's notice for pointer lock (see Limitations); turn off *Bloquear el puntero al arrastrar* to avoid it.
-- **The control bar disappeared:** with *Ocultar la barra de controles del vídeo* = *Solo a pantalla completa* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
-- **No sound on save:** check *Sonido de cámara al guardar* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
-- **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Rueda solo a pantalla completa* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.1 loaded`.
-- **"Error al guardar: vídeo fuera de las carpetas de WanGP":** the video is outside WanGP's folders (see Compatibility).
+- **Middle click does nothing:** many mouse utilities (Logitech Options/G HUB, Razer Synapse, etc.) can remap the wheel click to another function, in which case the browser never receives a middle click. Set it back to "Middle click" for the browser, and check that *Middle click (wheel click) on the video = save frame* is enabled in the Vidosser tab.
+- **No overlay or messages in fullscreen:** you are in native video fullscreen (see Limitations). Double-click the video instead, or use the gallery's fullscreen button. Check that *Video fullscreen with overlays and messages* is on.
+- **Ctrl + wheel zooms the page:** that's expected outside fullscreen when *Wheel only in fullscreen* is on, or when the pointer isn't over a video with it off.
+- **Dragging on a video doesn't scrub / a click doesn't pause any more:** check *Drag on the video = step frames* in the Vidosser tab; a movement under 4 px counts as a click, more than that as a drag.
+- **A banner "Press Esc to show your cursor" appears when I drag:** that is the browser's notice for pointer lock (see Limitations); turn off *Lock the pointer while dragging* to avoid it.
+- **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
+- **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
+- **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.2 loaded`.
+- **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.2**: every on-screen text in English or Spanish, following the browser's language (Spanish for any `es-*`, English otherwise); `settings.json` unchanged.
 - **1.4.1**: vertical volume drag fixed in fullscreen (no pointer lock for it; Windows pointer-lock quirks handled for the scrub); the cursor is only hidden while the left button is held during a drag in fullscreen (never outside fullscreen, never by Chrome's idle controls); overlay in native fullscreen as a subtitle.
 - **1.4.0**: vertical drag on the video = volume (axis locked by the dominant direction, overlay, sensitivity, invert, remembered volume); in fullscreen, a newly generated video no longer replaces the one you are watching (shown when you leave fullscreen).
 - **1.3.0**: drag on the video to scrub frames (pointer lock with hidden cursor); double-click toggles fullscreen; hide the control bar (in fullscreen by default) with a thin progress line; Ctrl + wheel short jump (configurable modifier, trackpad pinch); save feedback (message, flash, shutter sound); fullscreen with overlays on double-click; loop module (loop all, L toggle, frame-accurate A-B segment with I / O / U).

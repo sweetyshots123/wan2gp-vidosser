@@ -25,6 +25,9 @@
 //   MODULE save_frame   save_frame_as (D, or middle click on the video): saves the displayed frame (PNG/JPG), extracted
 //                       server-side from the source video (lossless, exact frame),
 //                       either with a "save as" dialog or straight into a folder.
+// Language: every on-screen text in English or Spanish (i18n(en, es)), Spanish for a browser
+// language es-*, English otherwise; the settings tab is switched to Spanish through the hidden
+// #vidosser_lang / #vidosser_lang_btn components (see localizeTab at the bottom).
 // Settings come from settings.json (injected below by plugin.py, refreshed on page
 // load and after "Save" in the Vidosser tab): "general", "keys" + one section per module.
 // ===========================================================================
@@ -34,6 +37,19 @@
     const SETTINGS = __VIDOSSER_SETTINGS__ || {};
     const VERSION = "__VIDOSSER_VERSION__";
     const V = window.__vidosser = { version: VERSION, settings: SETTINGS, core: null, modules: {} };
+
+    // ------------------------------------------------------------------ i18n
+    // Every on-screen text exists in English and Spanish: Spanish when the browser's language
+    // (navigator.languages[0], else navigator.language) is any es-*, English otherwise (default).
+    function detectLang() {
+        try {
+            const l = (navigator.languages && navigator.languages[0]) || navigator.language || "";
+            return /^es(?:[-_]|$)/i.test(String(l)) ? "es" : "en";
+        } catch (_) { return "en"; }
+    }
+    const LANG = detectLang();
+    const i18n = (en, es) => (LANG === "es" ? es : en);
+    V.lang = LANG; V.i18n = i18n;
 
     // =======================================================================
     // CORE
@@ -619,11 +635,11 @@
         function bridge(payload, timeoutMs = 120000) {
             const run = () => new Promise((resolve, reject) => {
                 const el = bridgeElements();
-                if (!el) { const err = new Error("Vidosser bridge not available"); err.bridgeMissing = true; reject(err); return; }
+                if (!el) { const err = new Error(i18n("Vidosser bridge not available", "puente de Vidosser no disponible")); err.bridgeMissing = true; reject(err); return; }
                 const id = `${Date.now()}-${++seq}`;
-                const timer = setTimeout(() => { pending.delete(id); reject(new Error("timeout")); }, timeoutMs);
+                const timer = setTimeout(() => { pending.delete(id); reject(new Error(i18n("timeout", "tiempo de espera agotado"))); }, timeoutMs);
                 pending.set(id, { resolve, timer });
-                el.req.value = JSON.stringify(Object.assign({}, payload, { id }));
+                el.req.value = JSON.stringify(Object.assign({ lang: LANG }, payload, { id }));
                 el.req.dispatchEvent(new Event("input", { bubbles: true }));
                 setTimeout(() => el.btn.click(), 30);
             });
@@ -709,7 +725,7 @@
         }
         function label(p) {
             const r = Math.round(clamp(p)), n = Math.round(r / 10);
-            return `Volumen ${"█".repeat(n)}${"░".repeat(10 - n)} ${String(r).padStart(3)} %` + (r === 0 ? " (silencio)" : "");
+            return `${i18n("Volume", "Volumen")} ${"█".repeat(n)}${"░".repeat(10 - n)} ${String(r).padStart(3)} %` + (r === 0 ? i18n(" (muted)", " (silencio)") : "");
         }
         function set(v, p, overlay = true) {
             p = Math.round(clamp(p));                                // whole percents (the drag keeps its own fraction)
@@ -850,7 +866,7 @@
             const fps = info.fps;
             const jump = jumpFrames(fps);
             const n = s.pending + s.pendingJumps * jump;
-            const label = s.pendingJumps && !s.pending ? `jump ${s.pendingJumps > 0 ? "+" : "-"}${Math.abs(s.pendingJumps) * jump} fr` +
+            const label = s.pendingJumps && !s.pending ? `${i18n("jump", "salto")} ${s.pendingJumps > 0 ? "+" : "-"}${Math.abs(s.pendingJumps) * jump} fr` +
                 (String(CFG.jump_mode).toLowerCase() === "frames" ? "" : ` (${Math.abs(s.pendingJumps) * CFG.jump_seconds} s)`) : "";
             s.pending = 0; s.pendingJumps = 0;
             if (!n) return;
@@ -1211,7 +1227,7 @@
             c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
             const quality = Math.min(1, Math.max(0.01, Number(CFG.jpg_quality) / 100));
             const blob = await new Promise(res => c.toBlob(res, mime(), quality));
-            if (!blob) throw new Error("canvas export failed");
+            if (!blob) throw new Error(i18n("canvas export failed", "no se pudo exportar la imagen"));
             return blob;
         }
 
@@ -1240,14 +1256,14 @@
                 const info = await core.ensureFps(video);
                 const t = video.currentTime;
                 const mode = String(CFG.mode).toLowerCase() === "direct" ? "direct" : "ask";
-                core.showOverlay(video, "Guardando frame...");
+                core.showOverlay(video, i18n("Saving frame...", "Guardando frame..."));
                 let res;
                 try { res = await core.bridge({ action: "save_frame", url: video.currentSrc, time: t, frame: Math.floor(t * info.fps + 1e-6), mode }); }
                 catch (err) { res = { ok: false, error: err.message, bridgeMissing: !!err.bridgeMissing }; }
                 if (mode === "direct") {
-                    core.showOverlay(video, res.ok ? `Guardado: ${res.path}` : `Error al guardar: ${res.error}`);
-                    if (res.ok) feedback(video, "ok", `Fotograma guardado (frame ${res.frame}): ${res.path}`);
-                    else feedback(video, "error", `Error al guardar: ${res.error}`);
+                    core.showOverlay(video, res.ok ? `${i18n("Saved", "Guardado")}: ${res.path}` : `${i18n("Save failed", "Error al guardar")}: ${res.error}`);
+                    if (res.ok) feedback(video, "ok", `${i18n("Frame saved", "Fotograma guardado")} (frame ${res.frame}): ${res.path}`);
+                    else feedback(video, "error", `${i18n("Save failed", "Error al guardar")}: ${res.error}`);
                     return res;
                 }
                 let blob, name, frame;
@@ -1257,8 +1273,8 @@
                     name = `${stemFromUrl(video.currentSrc)}_frame${String(frame).padStart(5, "0")}.${ext()}`;
                     try { blob = await canvasCapture(video); }
                     catch (err) {
-                        core.showOverlay(video, `Error al guardar: ${res.error || err.message}`);
-                        feedback(video, "error", `Error al guardar: ${res.error || err.message}`);
+                        core.showOverlay(video, `${i18n("Save failed", "Error al guardar")}: ${res.error || err.message}`);
+                        feedback(video, "error", `${i18n("Save failed", "Error al guardar")}: ${res.error || err.message}`);
                         return res;
                     }
                 }
@@ -1272,21 +1288,21 @@
                         const w = await handle.createWritable();
                         await w.write(blob); await w.close();
                         lastHandle = handle;
-                        core.showOverlay(video, `Guardado frame ${frame}: ${handle.name}`);
-                        feedback(video, "ok", `Fotograma guardado (frame ${frame}): ${handle.name}`);
+                        core.showOverlay(video, `${i18n("Saved frame", "Guardado frame")} ${frame}: ${handle.name}`);
+                        feedback(video, "ok", `${i18n("Frame saved", "Fotograma guardado")} (frame ${frame}): ${handle.name}`);
                         return { ok: true, frame, name: handle.name, via: "picker" };
                     } catch (err) {
                         if (err && err.name === "AbortError") {
-                            core.showOverlay(video, "Cancelado");
-                            feedback(video, "info", `No guardado (cancelado): frame ${frame}`);
+                            core.showOverlay(video, i18n("Cancelled", "Cancelado"));
+                            feedback(video, "info", `${i18n("Not saved (cancelled)", "No guardado (cancelado)")}: frame ${frame}`);
                             return { ok: false, cancelled: true };
                         }
                         // no user activation left / API refused: fall back to a normal download
                     }
                 }
                 download(blob, name);
-                core.showOverlay(video, `Guardado frame ${frame} (descarga): ${name}`);
-                feedback(video, "ok", `Fotograma descargado (frame ${frame}): ${name}`);
+                core.showOverlay(video, `${i18n("Saved frame", "Guardado frame")} ${frame} (${i18n("download", "descarga")}): ${name}`);
+                feedback(video, "ok", `${i18n("Frame downloaded", "Fotograma descargado")} (frame ${frame}): ${name}`);
                 return { ok: true, frame, name, via: "download" };
             } finally { busy = false; }
         }
@@ -1603,8 +1619,8 @@
             const on = !v.loop;
             override.set(srcOf(v), on);
             applyLoop(v);
-            core.toast(on ? "Bucle activado (este vídeo)" : "Bucle desactivado (este vídeo)", "info", 1800);
-            core.showOverlay(v, on ? "Bucle: sí" : "Bucle: no");
+            core.toast(on ? i18n("Loop on (this video)", "Bucle activado (este vídeo)") : i18n("Loop off (this video)", "Bucle desactivado (este vídeo)"), "info", 1800);
+            core.showOverlay(v, on ? i18n("Loop: on", "Bucle: sí") : i18n("Loop: off", "Bucle: no"));
         });
 
         // ------------------------------------------------------------- A-B segment
@@ -1637,9 +1653,10 @@
                 else { [s.in, s.out] = [s.out, s.in]; swapped = true; }
             }
             segments.set(src, s);
-            const label = which === "in" ? `Inicio de bucle: frame ${f}` : `Final de bucle: frame ${f}`;
-            const tail = ready(s) ? `  ·  bucle ${s.in}–${s.out}${swapped ? " (intercambiados)" : ""}`
-                : fresh ? `  ·  nuevo segmento (falta ${other === "out" ? "el final" : "el inicio"})` : "";
+            const label = which === "in" ? `${i18n("Loop start", "Inicio de bucle")}: frame ${f}` : `${i18n("Loop end", "Final de bucle")}: frame ${f}`;
+            const tail = ready(s) ? `  ·  ${i18n("loop", "bucle")} ${s.in}–${s.out}${swapped ? i18n(" (swapped)", " (intercambiados)") : ""}`
+                : fresh ? `  ·  ${other === "out" ? i18n("new segment (end missing)", "nuevo segmento (falta el final)")
+                                                  : i18n("new segment (start missing)", "nuevo segmento (falta el inicio)")}` : "";
             core.toast(label + tail, "info", 2200);
             core.showOverlay(v, label);
             watch(v); drawBar(v);
@@ -1650,8 +1667,8 @@
             if (CFG.enabled === false) return;
             segments.delete(srcOf(v));
             clearTimeout(timers.get(v)); timers.delete(v);
-            core.toast("Bucle borrado", "info", 1800);
-            core.showOverlay(v, "Bucle borrado");
+            core.toast(i18n("Loop cleared", "Bucle borrado"), "info", 1800);
+            core.showOverlay(v, i18n("Loop cleared", "Bucle borrado"));
             drawBar(v);
         });
 
@@ -1804,7 +1821,8 @@
         }
         function notify(n) {
             if (CFG.notify === false) return;
-            const text = n > 1 ? `${n} vídeos nuevos listos (sigues viendo este)` : "Nuevo vídeo listo (sigues viendo este)";
+            const text = n > 1 ? i18n(`${n} new videos ready (you're still watching this one)`, `${n} vídeos nuevos listos (sigues viendo este)`)
+                              : i18n("New video ready (you're still watching this one)", "Nuevo vídeo listo (sigues viendo este)");
             core.toast(text, "info", 2200);
         }
         // true = let Gradio set the new src now
@@ -1899,6 +1917,34 @@
         if (value && value !== last) V.applySettings(value);
         if (tries > 0) setTimeout(() => pickUpFreshSettings(tries - 1, value || last), 500);
     })(120, "");
+
+    // The settings tab is built in English. For a Spanish browser, write the language into the
+    // hidden #vidosser_lang textbox and click #vidosser_lang_btn: the server answers with the
+    // Spanish labels / infos / choices (and the textbox makes saves / checks answer in Spanish).
+    // Retried until the server confirms (V.i18nApplied) - the tab may mount after this script.
+    V.i18nApplied = function (l) { if (l === LANG) V.i18nDone = true; };
+    (function localizeTab(tries) {
+        if (LANG === "en" || V.i18nDone) return;
+        const box = document.querySelector("#vidosser_lang textarea, #vidosser_lang input");
+        let btn = document.querySelector("#vidosser_lang_btn");
+        if (btn && !btn.matches("button")) btn = btn.querySelector("button");
+        let wait = 500;
+        // Don't swap the labels / choices under the user's hands (an open dropdown would lose its list).
+        const ae = document.activeElement;
+        const busy = ae && ae !== document.body && ae.closest && ae.closest('[id^="vidosser_"]');
+        if (box && btn && document.readyState === "complete" && !busy) {
+            // Gradio only sends what its own state holds: during start-up a value written into
+            // the textarea can be dropped, and re-writing the same value is then not seen as a
+            // change. Clear it first, so every attempt is a real change.
+            box.value = "";
+            box.dispatchEvent(new Event("input", { bubbles: true }));
+            box.value = LANG;
+            box.dispatchEvent(new Event("input", { bubbles: true }));
+            setTimeout(() => btn.click(), 60);
+            wait = 1500;                                           // retry if the server has not confirmed by then
+        }
+        if (tries > 0) setTimeout(() => localizeTab(tries - 1), wait);
+    })(240);
 
     window.vidosser = V;                       // debug / scripting hook
     console.log(`[Vidosser] v${VERSION} loaded - modules: ${Object.keys(V.modules).filter(k => V.modules[k]).join(", ")}`);

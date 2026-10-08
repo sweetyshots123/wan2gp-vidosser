@@ -19,6 +19,9 @@ The browser part is ``vidosser.js``, injected through the official
 ``add_custom_js`` plugin API. The "Vidosser" tab edits ``settings.json`` (kept in
 this folder) and applies changes live; it also hosts the hidden JS <-> Python
 bridge used by save_frame. No core WanGP file is modified.
+
+Language: every user-facing text exists in English and Spanish (_TEXT); Spanish for a
+browser whose language is any es-*, English otherwise (see the i18n section below).
 """
 import base64
 import copy
@@ -38,15 +41,207 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.1"
+PLUGIN_VERSION = "1.4.2"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
-KEY_ACTIONS = [("next_frame", "Fotograma siguiente"), ("prev_frame", "Fotograma anterior"),
-               ("jump_forward", "Salto adelante"), ("jump_back", "Salto atrás"),
-               ("save_frame_as", "Guardar fotograma"),
-               ("toggle_loop", "Bucle on/off (este vídeo)"), ("mark_in", "Inicio del segmento A-B"),
-               ("mark_out", "Final del segmento A-B"), ("clear_segment", "Borrar segmento A-B")]
+# ------------------------------------------------------------------ i18n
+# Every user-facing text in English (default / fallback) and Spanish. The language is the
+# browser's (navigator.languages[0]): "es" for any es-*, otherwise "en". The tab is built in
+# English; vidosser.js sends the browser language once per page load and, for Spanish,
+# _localize() returns gr.update()s with the Spanish labels / infos / choices. Setting values
+# (settings.json) never depend on the language: only the displayed labels change.
+LANGS = ("en", "es")
+
+
+def norm_lang(lang):
+    return "es" if str(lang or "").strip().lower().replace("_", "-").split("-")[0] == "es" else "en"
+
+
+_TEXT = {
+    # keys
+    "key_next_frame": ("Next frame", "Fotograma siguiente"),
+    "key_prev_frame": ("Previous frame", "Fotograma anterior"),
+    "key_jump_forward": ("Jump forward", "Salto adelante"),
+    "key_jump_back": ("Jump back", "Salto atrás"),
+    "key_save_frame_as": ("Save frame", "Guardar fotograma"),
+    "key_toggle_loop": ("Loop on/off (this video)", "Bucle on/off (este vídeo)"),
+    "key_mark_in": ("A-B segment start", "Inicio del segmento A-B"),
+    "key_mark_out": ("A-B segment end", "Final del segmento A-B"),
+    "key_clear_segment": ("Clear A-B segment", "Borrar segmento A-B"),
+    # header
+    "intro": ("Video viewing tools. Changes are saved to `settings.json` in the plugin folder and applied at once in this browser tab "
+              "(in other tabs that are already open, after a reload). No need to restart WanGP.",
+              "Herramientas para ver vídeos. Los cambios se guardan en `settings.json` de la carpeta del plugin "
+              "y se aplican al momento en esta pestaña del navegador (en otras pestañas ya abiertas, al recargar). No hace falta reiniciar WanGP."),
+    "sec_keys": ("### Keys\nClick a box and press the key you want (Backspace = clear). "
+                 "The keys do nothing while you type in a text box, or with Ctrl/Alt/Cmd.",
+                 "### Teclas\nHaz clic en un cuadro y pulsa la tecla que quieras (Retroceso = borrar). "
+                 "Las teclas no hacen nada mientras escribes en un cuadro de texto, ni con Ctrl/Alt/Cmd."),
+    "keys_enabled": ("Keyboard shortcuts enabled", "Atajos de teclado activados"),
+    # frame stepping
+    "sec_frame_step": ("### Frame stepping", "### Paso de fotogramas"),
+    "wheel_enabled": ("Mouse wheel: 1 notch = 1 frame", "Rueda del ratón: 1 muesca = 1 fotograma"),
+    "wheel_fs_only": ("Wheel only in fullscreen (outside it the wheel scrolls the page as usual)",
+                      "Rueda solo a pantalla completa (fuera de ella la rueda desplaza la página como siempre)"),
+    "invert": ("Invert wheel direction", "Invertir sentido de la rueda"),
+    "shift_frames": ("Frames with Shift + wheel", "Fotogramas con Shift + rueda"),
+    "drag_scrub": ("Drag on the video = step frames", "Arrastrar sobre el vídeo = pasar fotogramas"),
+    "drag_scrub_info": ("Right = forward, left = back. A click without dragging does the usual (left: pause / play; right: context menu). "
+                        "Shift = ×«Frames with Shift», the short-jump modifier = short jumps. Also works outside fullscreen.",
+                        "Derecha = adelante, izquierda = atrás. Un clic sin arrastrar hace lo de siempre (izquierdo: pausa / reproduce; "
+                        "derecho: menú contextual). Shift = ×«Fotogramas con Shift», el modificador del salto corto = saltos cortos. "
+                        "Funciona también fuera de la pantalla completa."),
+    "drag_button": ("Drag button", "Botón para arrastrar"),
+    "drag_ppf": ("Pixels per frame when dragging", "Píxeles por fotograma al arrastrar"),
+    "drag_invert": ("Invert drag direction", "Invertir sentido al arrastrar"),
+    "drag_pointer_lock": ("Lock the pointer while dragging (no stop at the screen edge)", "Bloquear el puntero al arrastrar (sin tope en el borde de la pantalla)"),
+    "drag_pointer_lock_info": ("Only in fullscreen, while stepping frames with the left button held: the drag doesn't stop at the screen edge. "
+                               "Chrome shows its «Press Esc to show your cursor» notice at the top: that's normal. Releasing the button, Esc or "
+                               "switching window frees the pointer. Outside fullscreen it is never locked.",
+                               "Solo a pantalla completa, al pasar fotogramas con el botón izquierdo pulsado: el arrastre no se "
+                               "detiene en el borde de la pantalla. Chrome muestra arriba su aviso «Pulsa Esc para mostrar el "
+                               "cursor»: es normal. Al soltar el botón, Esc o cambiar de ventana el puntero se libera. Fuera de "
+                               "la pantalla completa nunca se bloquea."),
+    "drag_hide_cursor": ("Hide the cursor while dragging", "Ocultar el cursor mientras arrastras"),
+    "drag_hide_cursor_info": ("Only in fullscreen and only while you hold the left button (frames or volume). In any other case the cursor never disappears.",
+                              "Solo a pantalla completa y solo mientras mantienes pulsado el botón izquierdo (fotogramas o "
+                              "volumen). En cualquier otro caso el cursor nunca desaparece."),
+    # volume
+    "sec_volume": ("### Volume\nClick on the video, hold and drag **vertically**: up = louder, down = quieter. "
+                   "Dragging horizontally still steps frames: the direction is decided in the first 4 px (whichever moves more) and kept "
+                   "until you release. Uses the same button as frame dragging; in fullscreen, with the left button, the cursor "
+                   "is hidden while you drag (no pointer lock).",
+                   "### Volumen\nHaz clic sobre el vídeo, mantén pulsado y arrastra **en vertical**: hacia arriba sube el volumen, hacia abajo lo baja. "
+                   "Arrastrar en horizontal sigue pasando fotogramas: la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene "
+                   "hasta que sueltas. Usa el mismo botón que el arrastre de fotogramas; a pantalla completa, con el botón izquierdo, el cursor "
+                   "se oculta mientras arrastras (sin bloqueo del puntero)."),
+    "drag_volume": ("Vertical drag = volume", "Arrastrar en vertical = volumen"),
+    "drag_volume_info": ("A click or double-click without dragging does the usual. If the video is muted, raising turns the sound on. "
+                         "On touch screens, a vertical swipe only changes the volume in fullscreen.",
+                         "Un clic o un doble clic sin arrastrar hacen lo de siempre. Si el vídeo está silenciado, al subir se activa el sonido. "
+                         "En pantallas táctiles, el deslizamiento vertical solo cambia el volumen a pantalla completa."),
+    "volume_ppp": ("Pixels per 1 % of volume", "Píxeles por 1 % de volumen"),
+    "volume_ppp_info": ("2 = 200 px of dragging to go from 0 % to 100 %.", "2 = 200 px de arrastre para pasar de 0 % a 100 %."),
+    "volume_invert": ("Invert volume direction (down = louder)", "Invertir sentido del volumen (abajo = más alto)"),
+    "volume_remember": ("Remember the volume for the next videos", "Recordar el volumen para los siguientes vídeos"),
+    "volume_remember_info": ("Also after reloading the page (stored in this browser).", "También tras recargar la página (se guarda en este navegador)."),
+    # short jump
+    "sec_jump": ("### Short jump\nHow far each **W / Q** press and each wheel notch with the chosen modifier jumps.",
+                 "### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido."),
+    "jump_mode": ("Short jump: unit", "Salto corto: medida"),
+    "jump_seconds": ("Short jump: seconds", "Salto corto: segundos"),
+    "jump_frames": ("Short jump: frames", "Salto corto: fotogramas"),
+    "jump_modifier": ("Modifier + wheel = short jump", "Modificador + rueda = salto corto"),
+    "jump_modifier_info": ("One notch = one short jump. If you choose Shift, Shift + wheel does the short jump instead of the Shift multiplier.",
+                           "Una muesca = un salto corto. Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift."),
+    # loop
+    "sec_loop": ("### Loop\n**L** turns the loop of the current video on or off. **I** / **O** mark the start / end of an "
+                 "A-B segment at the current frame: when playing, only that part repeats (frame accurate). **U** clears the segment. "
+                 "The segment belongs to each video and is kept while the page is open. The keys are changed above, in «Keys».",
+                 "### Bucle\n**L** activa o desactiva el bucle del vídeo actual. **I** / **O** marcan el inicio / final de un "
+                 "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
+                 "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. Las teclas se cambian arriba, en «Teclas»."),
+    "loop_all": ("Loop all videos", "Repetir todos los vídeos en bucle"),
+    # new video
+    "sec_new_video": ("### New video\nWhen WanGP finishes a video, the gallery normally jumps to that new video. Outside fullscreen it keeps doing so as usual.",
+                      "### Vídeo nuevo\nCuando WanGP termina un vídeo, normalmente la galería salta a ese vídeo nuevo. "
+                      "Fuera de la pantalla completa sigue haciéndolo como siempre."),
+    "no_autojump": ("In fullscreen, don't jump to the new video", "A pantalla completa, no saltar al vídeo nuevo"),
+    "no_autojump_info": ("While you watch a gallery video in fullscreen, you stay on that video (same position, paused or playing, "
+                         "still fullscreen). The new video is added to the gallery anyway.",
+                         "Mientras ves un vídeo de la galería a pantalla completa, sigue en ese vídeo (misma posición, pausa o reproducción, "
+                         "sin salir de la pantalla completa). El vídeo nuevo se añade a la galería igualmente."),
+    "jump_on_exit": ("When leaving fullscreen, show the new video", "Al salir de la pantalla completa, mostrar el vídeo nuevo"),
+    "jump_on_exit_info": ("What WanGP would have done; so outside fullscreen the gallery keeps jumping to new videos.",
+                          "Lo que WanGP habría hecho; así, fuera de la pantalla completa, la galería sigue saltando a los vídeos nuevos."),
+    "new_notify": ("«New video ready» message", "Aviso «Nuevo vídeo listo»"),
+    "new_notify_info": ("Can't be shown in the video's native fullscreen.", "No se puede mostrar en la pantalla completa nativa del vídeo."),
+    # save frame
+    "sec_save": ("### Save frame", "### Guardar fotograma"),
+    "sf_format": ("Format", "Formato"),
+    "jpg_quality": ("JPG quality", "Calidad JPG"),
+    "sf_mode": ("Mode", "Modo"),
+    "folder": ("Folder (direct mode, on the computer running WanGP)", "Carpeta (modo directo, en el equipo donde corre WanGP)"),
+    "check_folder": ("Check folder", "Comprobar carpeta"),
+    "middle_click": ("Middle click (wheel click) on the video = save frame", "Clic central (clic de la rueda) sobre el vídeo = guardar fotograma"),
+    "sec_save_feedback": ("#### Save feedback", "#### Aviso al guardar"),
+    "toast": ("«Frame saved» message", "Mensaje «Fotograma guardado»"),
+    "toast_s": ("Message duration (seconds)", "Duración del mensaje (segundos)"),
+    "flash": ("White flash over the video", "Destello blanco sobre el vídeo"),
+    "sound": ("Camera sound when saving (low beep on failure)", "Sonido de cámara al guardar (pitido grave si falla)"),
+    "sound_info": ("The only feedback possible in the video's native fullscreen besides the subtitle line.",
+                   "Es el único aviso posible en la pantalla completa nativa del vídeo, además de la línea de subtítulo."),
+    "sound_volume": ("Volume", "Volumen"),
+    # overlay / fullscreen
+    "sec_overlay": ("### Overlay and fullscreen", "### Indicador y pantalla completa"),
+    "show_overlay": ("Show overlay on the video", "Mostrar indicador sobre el vídeo"),
+    "container_fs": ("Video fullscreen with overlays and messages", "Pantalla completa del vídeo con indicadores y mensajes"),
+    "container_fs_info": ("Double-clicking the video or WanGP's player fullscreen button use a fullscreen in which the overlay and the "
+                          "messages are visible. The fullscreen button of the browser's native control bar stays native.",
+                          "Doble clic en el vídeo o el botón de pantalla completa del reproductor de WanGP usan una pantalla completa "
+                          "en la que se ven el indicador y los mensajes. El botón de pantalla completa de la barra nativa del navegador sigue siendo nativo."),
+    "hide_controls": ("Hide the video control bar", "Ocultar la barra de controles del vídeo"),
+    "hide_controls_info": ("Without the bar, a click (or the space bar) still pauses / plays and the whole video can be dragged.",
+                           "Sin barra, el clic (o la barra espaciadora) sigue pausando / reproduciendo y todo el vídeo sirve para arrastrar."),
+    "thin_progress": ("Thin progress bar (3 px) when the controls are hidden", "Barra de progreso fina (3 px) cuando los controles están ocultos"),
+    "default_fps": ("FPS when they can't be detected", "FPS si no se pueden detectar"),
+    "save_settings": ("Save settings", "Guardar ajustes"),
+    # choices
+    "ch_seconds": ("In seconds", "En segundos"), "ch_frames": ("In frames", "En fotogramas"),
+    "ch_png": ("PNG (lossless)", "PNG (sin pérdida)"), "ch_jpg": ("JPG", "JPG"),
+    "ch_ask": ("Ask where to save", "Preguntar dónde guardar"), "ch_direct": ("Save straight into the folder", "Guardar directamente en la carpeta"),
+    "ch_hc_off": ("No", "No"), "ch_hc_fullscreen": ("Only in fullscreen", "Solo a pantalla completa"), "ch_hc_always": ("Always", "Siempre"),
+    "ch_left": ("Left", "Izquierdo"), "ch_right": ("Right", "Derecho"),
+    "ch_ctrl": ("Ctrl", "Ctrl"), "ch_alt": ("Alt", "Alt"), "ch_shift": ("Shift", "Shift"), "ch_meta": ("Meta (Cmd / Win)", "Meta (Cmd / Win)"),
+    "ch_none": ("None", "Ninguno"),
+    # messages
+    "msg_range": ("«{label}» must be between {minimum} and {maximum}.", "«{label}» debe estar entre {minimum} y {maximum}."),
+    "msg_folder": ("Folder `{path}`: {message}.", "Carpeta `{path}`: {message}."),
+    "msg_invalid": ("«{label}»: invalid value.", "«{label}»: valor no válido."),
+    "msg_not_saved": ("❌ Not saved ({time}):", "❌ No se ha guardado ({time}):"),
+    "msg_shift_note": ("Note: the short-jump modifier is Shift, so Shift + wheel does a short jump and the «Frames with Shift + wheel» ({n}) are not used.",
+                       "Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y los «Fotogramas con Shift + rueda» ({n}) no se usan."),
+    "msg_write_failed": ("❌ Could not write settings.json: {error}", "❌ No se ha podido escribir settings.json: {error}"),
+    "msg_saved": ("✅ Settings saved and applied at {time} (in other browser tabs that are already open, reload the page).",
+                  "✅ Ajustes guardados y aplicados a las {time} (en otras pestañas del navegador ya abiertas, recarga la página)."),
+    "msg_one_key": ("«{label}»: enter a single key (letter, digit or sign).", "«{label}»: pon una sola tecla (letra, número o signo)."),
+    "msg_dup_key": ("The key «{key}» is used twice, in «{a}» and «{b}».", "La tecla «{key}» está repetida en «{a}» y «{b}»."),
+    "fold_not_dir": ("exists but is not a folder", "existe pero no es una carpeta"),
+    "fold_will_create": ("doesn't exist yet (it will be created when saving)", "no existe todavía (se creará al guardar)"),
+    "fold_ready": ("ready to save", "lista para guardar"),
+    "fold_no_write": ("can't write ({error})", "no se puede escribir ({error})"),
+    "err_bad_request": ("invalid request", "petición no válida"),
+    "err_unknown_action": ("unknown action", "acción desconocida"),
+    "err_not_server_file": ("this video is not a file on the server", "este vídeo no es un archivo del servidor"),
+    "err_not_found": ("video not found on the server", "vídeo no encontrado en el servidor"),
+    "err_outside": ("video outside WanGP's folders", "vídeo fuera de las carpetas de WanGP"),
+    "err_no_ffmpeg": ("ffmpeg not available", "ffmpeg no disponible"),
+    "err_disabled": ("save frame is disabled", "guardar fotograma está desactivado"),
+    "err_bad_time": ("invalid time", "tiempo no válido"),
+    "err_folder": ("folder {folder}: {message}", "carpeta {folder}: {message}"),
+}
+
+
+def tr(text_key, lang="en", /, **fmt):
+    en, es = _TEXT[text_key]
+    text = es if norm_lang(lang) == "es" else en
+    return text.format(**fmt) if fmt else text
+
+
+class LocalizedError(Exception):
+    """An error whose message is a _TEXT key (translated when it reaches the user)."""
+    def __init__(self, key, **fmt):
+        super().__init__(tr(key, "en", **fmt))
+        self.key, self.fmt = key, fmt
+
+    def text(self, lang):
+        return tr(self.key, lang, **self.fmt)
+
+
+# (action, English label); localized labels: tr("key_<action>", lang)
+KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as",
+                                                   "toggle_loop", "mark_in", "mark_out", "clear_segment")]
 LOOP_ACTIONS = ("toggle_loop", "mark_in", "mark_out", "clear_segment")
 
 DEFAULT_SETTINGS = {
@@ -130,9 +325,35 @@ _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
             ("frame_step", "drag_button"): ("left", "right"),
             ("general", "hide_controls"): ("off", "fullscreen", "always")}
-HIDE_CONTROLS_CHOICES = [("No", "off"), ("Solo a pantalla completa", "fullscreen"), ("Siempre", "always")]
-DRAG_BUTTON_CHOICES = [("Izquierdo", "left"), ("Derecho", "right")]
-JUMP_MODIFIER_CHOICES = [("Ctrl", "ctrl"), ("Alt", "alt"), ("Shift", "shift"), ("Meta (Cmd / Win)", "meta"), ("Ninguno", "none")]
+# dropdown / radio choices: (label key, value). Values are what settings.json stores (never translated).
+_CHOICE_KEYS = {
+    "hide_controls": [("ch_hc_off", "off"), ("ch_hc_fullscreen", "fullscreen"), ("ch_hc_always", "always")],
+    "drag_button": [("ch_left", "left"), ("ch_right", "right")],
+    "jump_modifier": [("ch_ctrl", "ctrl"), ("ch_alt", "alt"), ("ch_shift", "shift"), ("ch_meta", "meta"), ("ch_none", "none")],
+    "jump_mode": [("ch_seconds", "seconds"), ("ch_frames", "frames")],
+    "format": [("ch_png", "png"), ("ch_jpg", "jpg")],
+    "mode": [("ch_ask", "ask"), ("ch_direct", "direct")],
+}
+
+
+def choices(name, lang="en"):
+    return [(tr(k, lang), v) for k, v in _CHOICE_KEYS[name]]
+
+
+HIDE_CONTROLS_CHOICES = choices("hide_controls")
+DRAG_BUTTON_CHOICES = choices("drag_button")
+JUMP_MODIFIER_CHOICES = choices("jump_modifier")
+
+
+def _page_lang_js(n_inputs):
+    """Gradio `js` pre-step: the last input (language) is the page's language from vidosser.js,
+    so save / check messages are in the right language even before the tab is localized."""
+    return (f"(...a) => {{ a = a.slice(0, {n_inputs}); "
+            f"a[{n_inputs - 1}] = (window.vidosser && window.vidosser.lang) || a[{n_inputs - 1}] || 'en'; return a; }}")
+
+
+def title_md(lang="en"):
+    return f"## Vidosser {PLUGIN_VERSION}\n" + tr("intro", lang)
 _ALLOW_EMPTY = {("save_frame", "folder")}
 
 
@@ -234,18 +455,18 @@ def save_settings(settings, path=None):
     os.replace(tmp, path)
 
 
-def validate_keys(keys):
-    """keys: dict action -> key. Returns (normalized dict, list of errors)."""
+def validate_keys(keys, lang="en"):
+    """keys: dict action -> key. Returns (normalized dict, list of errors in `lang`)."""
     errors, normalized, used = [], {}, {}
-    labels = dict(KEY_ACTIONS)
+    labels = {a: tr("key_" + a, lang) for a, _l in KEY_ACTIONS}
     for action, _label in KEY_ACTIONS:
         key = str(keys.get(action) or "").strip()
         key = key.lower()
         if len(key) != 1 or not key.isprintable() or key.isspace():
-            errors.append(f"«{labels[action]}»: pon una sola tecla (letra, número o signo).")
+            errors.append(tr("msg_one_key", lang, label=labels[action]))
             continue
         if key in used:
-            errors.append(f"La tecla «{key.upper()}» está repetida en «{labels[used[key]]}» y «{labels[action]}».")
+            errors.append(tr("msg_dup_key", lang, key=key.upper(), a=labels[used[key]], b=labels[action]))
             continue
         used[key] = action
         normalized[action] = key
@@ -295,148 +516,142 @@ class VidosserPlugin(WAN2GPPlugin):
         folder = str(folder or "").strip().strip('"')
         return os.path.abspath(os.path.expanduser(folder)) if folder else self.default_folder()
 
-    def check_folder(self, folder, create=True):
-        """Returns (ok, absolute path, message)."""
+    def check_folder(self, folder, create=True, lang="en"):
+        """Returns (ok, absolute path, message in `lang`)."""
         path = self.resolve_folder(folder)
         try:
             if not os.path.isdir(path):
                 if os.path.exists(path):
-                    return False, path, "existe pero no es una carpeta"
+                    return False, path, tr("fold_not_dir", lang)
                 if not create:
-                    return True, path, "no existe todavía (se creará al guardar)"
+                    return True, path, tr("fold_will_create", lang)
                 os.makedirs(path, exist_ok=True)
             fd, probe = tempfile.mkstemp(prefix=".vidosser_", dir=path)
             os.close(fd)
             os.remove(probe)
-            return True, path, "lista para guardar"
+            return True, path, tr("fold_ready", lang)
         except Exception as e:
-            return False, path, f"no se puede escribir ({e})"
+            return False, path, tr("fold_no_write", lang, error=e)
 
     # ---------------------------------------------------------------- UI tab
     def create_ui(self):
         current = lambda section, key: (lambda: load_settings()[section][key])
+        reg = []                                   # (component, {gradio attr: _TEXT key | ("choices", name) | ("title",)})
+
+        def loc(component, **texts):
+            reg.append((component, texts))
+            return component
+        T = lambda key: tr(key, "en")              # built in English; _localize() switches a Spanish browser to Spanish
+        C = lambda name: choices(name, "en")
+
         gr.HTML(_CSS)
-        gr.Markdown(f"## Vidosser {PLUGIN_VERSION}\nHerramientas para ver vídeos. Los cambios se guardan en `settings.json` de la carpeta del plugin "
-                    "y se aplican al momento en esta pestaña del navegador (en otras pestañas ya abiertas, al recargar). No hace falta reiniciar WanGP.")
+        loc(gr.Markdown(title_md("en"), elem_id="vidosser_title"), value=("title",))
         with gr.Group():
-            gr.Markdown("### Teclas\nHaz clic en un cuadro y pulsa la tecla que quieras (Retroceso = borrar). "
-                        "Las teclas no hacen nada mientras escribes en un cuadro de texto, ni con Ctrl/Alt/Cmd.")
+            loc(gr.Markdown(T("sec_keys"), elem_id="vidosser_sec_keys"), value="sec_keys")
             key_boxes = []
             for row in ([a for a in KEY_ACTIONS if a[0] not in LOOP_ACTIONS], [a for a in KEY_ACTIONS if a[0] in LOOP_ACTIONS]):
                 with gr.Row():
-                    for action, label in row:
-                        key_boxes.append(gr.Textbox(label=label, value=current("keys", action), max_lines=1, min_width=120,
-                                                    elem_id=f"vidosser_key_{action}", elem_classes="vidosser-key-input"))
-            keys_enabled = gr.Checkbox(label="Atajos de teclado activados", value=current("keys", "enabled"), elem_id="vidosser_keys_enabled")
+                    for action, _label in row:
+                        key_boxes.append(loc(gr.Textbox(label=T(f"key_{action}"), value=current("keys", action), max_lines=1, min_width=120,
+                                                        elem_id=f"vidosser_key_{action}", elem_classes="vidosser-key-input"), label=f"key_{action}"))
+            keys_enabled = loc(gr.Checkbox(label=T("keys_enabled"), value=current("keys", "enabled"), elem_id="vidosser_keys_enabled"), label="keys_enabled")
         with gr.Group():
-            gr.Markdown("### Paso de fotogramas")
+            loc(gr.Markdown(T("sec_frame_step"), elem_id="vidosser_sec_frame_step"), value="sec_frame_step")
             with gr.Row():
-                wheel_enabled = gr.Checkbox(label="Rueda del ratón: 1 muesca = 1 fotograma", value=current("frame_step", "wheel_enabled"), elem_id="vidosser_wheel_enabled")
-                wheel_fs_only = gr.Checkbox(label="Rueda solo a pantalla completa (fuera de ella la rueda desplaza la página como siempre)",
-                                            value=current("frame_step", "wheel_fullscreen_only"), elem_id="vidosser_wheel_fullscreen_only")
-                invert = gr.Checkbox(label="Invertir sentido de la rueda", value=current("frame_step", "invert_direction"), elem_id="vidosser_invert")
-                shift_frames = gr.Number(label="Fotogramas con Shift + rueda", value=current("frame_step", "shift_frames"), precision=0, minimum=1, elem_id="vidosser_shift_frames")
+                wheel_enabled = loc(gr.Checkbox(label=T("wheel_enabled"), value=current("frame_step", "wheel_enabled"), elem_id="vidosser_wheel_enabled"), label="wheel_enabled")
+                wheel_fs_only = loc(gr.Checkbox(label=T("wheel_fs_only"), value=current("frame_step", "wheel_fullscreen_only"),
+                                                elem_id="vidosser_wheel_fullscreen_only"), label="wheel_fs_only")
+                invert = loc(gr.Checkbox(label=T("invert"), value=current("frame_step", "invert_direction"), elem_id="vidosser_invert"), label="invert")
+                shift_frames = loc(gr.Number(label=T("shift_frames"), value=current("frame_step", "shift_frames"), precision=0, minimum=1,
+                                             elem_id="vidosser_shift_frames"), label="shift_frames")
             with gr.Row():
-                drag_scrub = gr.Checkbox(label="Arrastrar sobre el vídeo = pasar fotogramas", value=current("frame_step", "drag_scrub"),
-                                         elem_id="vidosser_drag_scrub",
-                                         info="Derecha = adelante, izquierda = atrás. Un clic sin arrastrar hace lo de siempre (izquierdo: pausa / reproduce; "
-                                              "derecho: menú contextual). Shift = ×«Fotogramas con Shift», el modificador del salto corto = saltos cortos. "
-                                              "Funciona también fuera de la pantalla completa.")
-                drag_button = gr.Dropdown(label="Botón para arrastrar", choices=DRAG_BUTTON_CHOICES, value=current("frame_step", "drag_button"),
-                                          elem_id="vidosser_drag_button")
-                drag_ppf = gr.Number(label="Píxeles por fotograma al arrastrar", value=current("frame_step", "drag_pixels_per_frame"), precision=0,
-                                     minimum=1, maximum=200, elem_id="vidosser_drag_pixels_per_frame")
-                drag_invert = gr.Checkbox(label="Invertir sentido al arrastrar", value=current("frame_step", "drag_invert"), elem_id="vidosser_drag_invert")
+                drag_scrub = loc(gr.Checkbox(label=T("drag_scrub"), value=current("frame_step", "drag_scrub"), elem_id="vidosser_drag_scrub",
+                                             info=T("drag_scrub_info")), label="drag_scrub", info="drag_scrub_info")
+                drag_button = loc(gr.Dropdown(label=T("drag_button"), choices=C("drag_button"), value=current("frame_step", "drag_button"),
+                                              elem_id="vidosser_drag_button"), label="drag_button", choices=("choices", "drag_button"))
+                drag_ppf = loc(gr.Number(label=T("drag_ppf"), value=current("frame_step", "drag_pixels_per_frame"), precision=0,
+                                         minimum=1, maximum=200, elem_id="vidosser_drag_pixels_per_frame"), label="drag_ppf")
+                drag_invert = loc(gr.Checkbox(label=T("drag_invert"), value=current("frame_step", "drag_invert"), elem_id="vidosser_drag_invert"), label="drag_invert")
             with gr.Row():
-                drag_pointer_lock = gr.Checkbox(label="Bloquear el puntero al arrastrar (sin tope en el borde de la pantalla)",
-                                                value=current("frame_step", "drag_pointer_lock"), elem_id="vidosser_drag_pointer_lock",
-                                                info="Solo a pantalla completa, al pasar fotogramas con el botón izquierdo pulsado: el arrastre no se "
-                                                     "detiene en el borde de la pantalla. Chrome muestra arriba su aviso «Pulsa Esc para mostrar el "
-                                                     "cursor»: es normal. Al soltar el botón, Esc o cambiar de ventana el puntero se libera. Fuera de "
-                                                     "la pantalla completa nunca se bloquea.")
-                drag_hide_cursor = gr.Checkbox(label="Ocultar el cursor mientras arrastras", value=current("frame_step", "drag_hide_cursor"),
-                                               elem_id="vidosser_drag_hide_cursor",
-                                               info="Solo a pantalla completa y solo mientras mantienes pulsado el botón izquierdo (fotogramas o "
-                                                    "volumen). En cualquier otro caso el cursor nunca desaparece.")
+                drag_pointer_lock = loc(gr.Checkbox(label=T("drag_pointer_lock"), value=current("frame_step", "drag_pointer_lock"),
+                                                    elem_id="vidosser_drag_pointer_lock", info=T("drag_pointer_lock_info")),
+                                        label="drag_pointer_lock", info="drag_pointer_lock_info")
+                drag_hide_cursor = loc(gr.Checkbox(label=T("drag_hide_cursor"), value=current("frame_step", "drag_hide_cursor"),
+                                                   elem_id="vidosser_drag_hide_cursor", info=T("drag_hide_cursor_info")),
+                                       label="drag_hide_cursor", info="drag_hide_cursor_info")
         with gr.Group():
-            gr.Markdown("### Volumen\nHaz clic sobre el vídeo, mantén pulsado y arrastra **en vertical**: hacia arriba sube el volumen, hacia abajo lo baja. "
-                        "Arrastrar en horizontal sigue pasando fotogramas: la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene "
-                        "hasta que sueltas. Usa el mismo botón que el arrastre de fotogramas; a pantalla completa, con el botón izquierdo, el cursor "
-                        "se oculta mientras arrastras (sin bloqueo del puntero).")
+            loc(gr.Markdown(T("sec_volume"), elem_id="vidosser_sec_volume"), value="sec_volume")
             with gr.Row():
-                drag_volume = gr.Checkbox(label="Arrastrar en vertical = volumen", value=current("volume", "drag_volume"), elem_id="vidosser_drag_volume",
-                                          info="Un clic o un doble clic sin arrastrar hacen lo de siempre. Si el vídeo está silenciado, al subir se activa el sonido. "
-                                               "En pantallas táctiles, el deslizamiento vertical solo cambia el volumen a pantalla completa.")
-                volume_ppp = gr.Number(label="Píxeles por 1 % de volumen", value=current("volume", "drag_pixels_per_percent"), minimum=0.2, maximum=50, step=0.5,
-                                       elem_id="vidosser_volume_pixels_per_percent", info="2 = 200 px de arrastre para pasar de 0 % a 100 %.")
-                volume_invert = gr.Checkbox(label="Invertir sentido del volumen (abajo = más alto)", value=current("volume", "drag_invert"), elem_id="vidosser_volume_invert")
-                volume_remember = gr.Checkbox(label="Recordar el volumen para los siguientes vídeos", value=current("volume", "remember"), elem_id="vidosser_volume_remember",
-                                              info="También tras recargar la página (se guarda en este navegador).")
+                drag_volume = loc(gr.Checkbox(label=T("drag_volume"), value=current("volume", "drag_volume"), elem_id="vidosser_drag_volume",
+                                              info=T("drag_volume_info")), label="drag_volume", info="drag_volume_info")
+                volume_ppp = loc(gr.Number(label=T("volume_ppp"), value=current("volume", "drag_pixels_per_percent"), minimum=0.2, maximum=50, step=0.5,
+                                           elem_id="vidosser_volume_pixels_per_percent", info=T("volume_ppp_info")), label="volume_ppp", info="volume_ppp_info")
+                volume_invert = loc(gr.Checkbox(label=T("volume_invert"), value=current("volume", "drag_invert"), elem_id="vidosser_volume_invert"), label="volume_invert")
+                volume_remember = loc(gr.Checkbox(label=T("volume_remember"), value=current("volume", "remember"), elem_id="vidosser_volume_remember",
+                                                  info=T("volume_remember_info")), label="volume_remember", info="volume_remember_info")
         with gr.Group():
-            gr.Markdown("### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido.")
+            loc(gr.Markdown(T("sec_jump"), elem_id="vidosser_sec_jump"), value="sec_jump")
             with gr.Row():
-                jump_mode = gr.Radio(label="Salto corto: medida", choices=[("En segundos", "seconds"), ("En fotogramas", "frames")], value=current("frame_step", "jump_mode"), elem_id="vidosser_jump_mode")
-                jump_seconds = gr.Number(label="Salto corto: segundos", value=current("frame_step", "jump_seconds"), minimum=0.01, elem_id="vidosser_jump_seconds")
-                jump_frames = gr.Number(label="Salto corto: fotogramas", value=current("frame_step", "jump_frames"), precision=0, minimum=1, elem_id="vidosser_jump_frames")
-                jump_modifier = gr.Dropdown(label="Modificador + rueda = salto corto", choices=JUMP_MODIFIER_CHOICES,
-                                            value=current("frame_step", "wheel_jump_modifier"), elem_id="vidosser_wheel_jump_modifier",
-                                            info="Una muesca = un salto corto. Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift.")
+                jump_mode = loc(gr.Radio(label=T("jump_mode"), choices=C("jump_mode"), value=current("frame_step", "jump_mode"), elem_id="vidosser_jump_mode"),
+                                label="jump_mode", choices=("choices", "jump_mode"))
+                jump_seconds = loc(gr.Number(label=T("jump_seconds"), value=current("frame_step", "jump_seconds"), minimum=0.01, elem_id="vidosser_jump_seconds"),
+                                   label="jump_seconds")
+                jump_frames = loc(gr.Number(label=T("jump_frames"), value=current("frame_step", "jump_frames"), precision=0, minimum=1, elem_id="vidosser_jump_frames"),
+                                  label="jump_frames")
+                jump_modifier = loc(gr.Dropdown(label=T("jump_modifier"), choices=C("jump_modifier"), value=current("frame_step", "wheel_jump_modifier"),
+                                                elem_id="vidosser_wheel_jump_modifier", info=T("jump_modifier_info")),
+                                    label="jump_modifier", info="jump_modifier_info", choices=("choices", "jump_modifier"))
         with gr.Group():
-            gr.Markdown("### Bucle\n**L** activa o desactiva el bucle del vídeo actual. **I** / **O** marcan el inicio / final de un "
-                        "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
-                        "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. Las teclas se cambian arriba, en «Teclas».")
-            loop_all = gr.Checkbox(label="Repetir todos los vídeos en bucle", value=current("loop", "loop_all"), elem_id="vidosser_loop_all")
+            loc(gr.Markdown(T("sec_loop"), elem_id="vidosser_sec_loop"), value="sec_loop")
+            loop_all = loc(gr.Checkbox(label=T("loop_all"), value=current("loop", "loop_all"), elem_id="vidosser_loop_all"), label="loop_all")
         with gr.Group():
-            gr.Markdown("### Vídeo nuevo\nCuando WanGP termina un vídeo, normalmente la galería salta a ese vídeo nuevo. "
-                        "Fuera de la pantalla completa sigue haciéndolo como siempre.")
+            loc(gr.Markdown(T("sec_new_video"), elem_id="vidosser_sec_new_video"), value="sec_new_video")
             with gr.Row():
-                no_autojump = gr.Checkbox(label="A pantalla completa, no saltar al vídeo nuevo", value=current("new_video", "no_autojump_fullscreen"),
-                                          elem_id="vidosser_no_autojump_fullscreen",
-                                          info="Mientras ves un vídeo de la galería a pantalla completa, sigue en ese vídeo (misma posición, pausa o reproducción, "
-                                               "sin salir de la pantalla completa). El vídeo nuevo se añade a la galería igualmente.")
-                jump_on_exit = gr.Checkbox(label="Al salir de la pantalla completa, mostrar el vídeo nuevo", value=current("new_video", "jump_on_fullscreen_exit"),
-                                           elem_id="vidosser_jump_on_fullscreen_exit",
-                                           info="Lo que WanGP habría hecho; así, fuera de la pantalla completa, la galería sigue saltando a los vídeos nuevos.")
-                new_notify = gr.Checkbox(label="Aviso «Nuevo vídeo listo»", value=current("new_video", "notify"), elem_id="vidosser_new_video_notify",
-                                         info="No se puede mostrar en la pantalla completa nativa del vídeo.")
+                no_autojump = loc(gr.Checkbox(label=T("no_autojump"), value=current("new_video", "no_autojump_fullscreen"), elem_id="vidosser_no_autojump_fullscreen",
+                                              info=T("no_autojump_info")), label="no_autojump", info="no_autojump_info")
+                jump_on_exit = loc(gr.Checkbox(label=T("jump_on_exit"), value=current("new_video", "jump_on_fullscreen_exit"), elem_id="vidosser_jump_on_fullscreen_exit",
+                                               info=T("jump_on_exit_info")), label="jump_on_exit", info="jump_on_exit_info")
+                new_notify = loc(gr.Checkbox(label=T("new_notify"), value=current("new_video", "notify"), elem_id="vidosser_new_video_notify",
+                                             info=T("new_notify_info")), label="new_notify", info="new_notify_info")
         with gr.Group():
-            gr.Markdown("### Guardar fotograma")
+            loc(gr.Markdown(T("sec_save"), elem_id="vidosser_sec_save"), value="sec_save")
             with gr.Row():
-                sf_format = gr.Radio(label="Formato", choices=[("PNG (sin pérdida)", "png"), ("JPG", "jpg")], value=current("save_frame", "format"), elem_id="vidosser_format")
-                jpg_quality = gr.Slider(label="Calidad JPG", minimum=1, maximum=100, step=1, value=current("save_frame", "jpg_quality"), elem_id="vidosser_jpg_quality")
-                sf_mode = gr.Radio(label="Modo", choices=[("Preguntar dónde guardar", "ask"), ("Guardar directamente en la carpeta", "direct")], value=current("save_frame", "mode"), elem_id="vidosser_mode")
+                sf_format = loc(gr.Radio(label=T("sf_format"), choices=C("format"), value=current("save_frame", "format"), elem_id="vidosser_format"),
+                                label="sf_format", choices=("choices", "format"))
+                jpg_quality = loc(gr.Slider(label=T("jpg_quality"), minimum=1, maximum=100, step=1, value=current("save_frame", "jpg_quality"), elem_id="vidosser_jpg_quality"),
+                                  label="jpg_quality")
+                sf_mode = loc(gr.Radio(label=T("sf_mode"), choices=C("mode"), value=current("save_frame", "mode"), elem_id="vidosser_mode"),
+                              label="sf_mode", choices=("choices", "mode"))
             with gr.Row():
-                folder = gr.Textbox(label="Carpeta (modo directo, en el equipo donde corre WanGP)", value=current("save_frame", "folder"),
-                                    placeholder=self.default_folder(), max_lines=1, scale=4, elem_id="vidosser_folder")
-                check_btn = gr.Button("Comprobar carpeta", scale=1, elem_id="vidosser_check_folder")
+                folder = loc(gr.Textbox(label=T("folder"), value=current("save_frame", "folder"), placeholder=self.default_folder(), max_lines=1, scale=4,
+                                        elem_id="vidosser_folder"), label="folder")
+                check_btn = loc(gr.Button(T("check_folder"), scale=1, elem_id="vidosser_check_folder"), value="check_folder")
             folder_status = gr.Markdown("", elem_id="vidosser_folder_status")
-            middle_click = gr.Checkbox(label="Clic central (clic de la rueda) sobre el vídeo = guardar fotograma", value=current("save_frame", "middle_click_save"),
-                                       elem_id="vidosser_middle_click_save")
-            gr.Markdown("#### Aviso al guardar")
+            middle_click = loc(gr.Checkbox(label=T("middle_click"), value=current("save_frame", "middle_click_save"), elem_id="vidosser_middle_click_save"), label="middle_click")
+            loc(gr.Markdown(T("sec_save_feedback"), elem_id="vidosser_sec_save_feedback"), value="sec_save_feedback")
             with gr.Row():
-                toast = gr.Checkbox(label="Mensaje «Fotograma guardado»", value=current("save_frame", "toast"), elem_id="vidosser_toast")
-                toast_s = gr.Number(label="Duración del mensaje (segundos)", value=lambda: load_settings()["save_frame"]["toast_ms"] / 1000,
-                                    minimum=0.5, maximum=30, step=0.5, elem_id="vidosser_toast_s")
-                flash = gr.Checkbox(label="Destello blanco sobre el vídeo", value=current("save_frame", "flash"), elem_id="vidosser_flash")
+                toast = loc(gr.Checkbox(label=T("toast"), value=current("save_frame", "toast"), elem_id="vidosser_toast"), label="toast")
+                toast_s = loc(gr.Number(label=T("toast_s"), value=lambda: load_settings()["save_frame"]["toast_ms"] / 1000,
+                                        minimum=0.5, maximum=30, step=0.5, elem_id="vidosser_toast_s"), label="toast_s")
+                flash = loc(gr.Checkbox(label=T("flash"), value=current("save_frame", "flash"), elem_id="vidosser_flash"), label="flash")
             with gr.Row():
-                sound = gr.Checkbox(label="Sonido de cámara al guardar (pitido grave si falla)", value=current("save_frame", "sound"), elem_id="vidosser_sound",
-                                    info="Es el único aviso posible en la pantalla completa nativa del vídeo.")
-                sound_volume = gr.Slider(label="Volumen", minimum=1, maximum=100, step=1, value=current("save_frame", "sound_volume"), elem_id="vidosser_sound_volume")
+                sound = loc(gr.Checkbox(label=T("sound"), value=current("save_frame", "sound"), elem_id="vidosser_sound", info=T("sound_info")),
+                            label="sound", info="sound_info")
+                sound_volume = loc(gr.Slider(label=T("sound_volume"), minimum=1, maximum=100, step=1, value=current("save_frame", "sound_volume"),
+                                             elem_id="vidosser_sound_volume"), label="sound_volume")
         with gr.Group():
-            gr.Markdown("### Indicador y pantalla completa")
+            loc(gr.Markdown(T("sec_overlay"), elem_id="vidosser_sec_overlay"), value="sec_overlay")
             with gr.Row():
-                show_overlay = gr.Checkbox(label="Mostrar indicador sobre el vídeo", value=current("general", "show_overlay"), elem_id="vidosser_show_overlay")
-                container_fs = gr.Checkbox(label="Pantalla completa del vídeo con indicadores y mensajes", value=current("general", "container_fullscreen"),
-                                           elem_id="vidosser_container_fullscreen",
-                                           info="Doble clic en el vídeo o el botón de pantalla completa del reproductor de WanGP usan una pantalla completa "
-                                                "en la que se ven el indicador y los mensajes. El botón de pantalla completa de la barra nativa del navegador sigue siendo nativo.")
-                hide_controls = gr.Dropdown(label="Ocultar la barra de controles del vídeo", choices=HIDE_CONTROLS_CHOICES,
-                                            value=current("general", "hide_controls"), elem_id="vidosser_hide_controls",
-                                            info="Sin barra, el clic (o la barra espaciadora) sigue pausando / reproduciendo y todo el vídeo sirve para arrastrar.")
-                thin_progress = gr.Checkbox(label="Barra de progreso fina (3 px) cuando los controles están ocultos", value=current("general", "show_thin_progress"),
-                                            elem_id="vidosser_show_thin_progress")
-                default_fps = gr.Number(label="FPS si no se pueden detectar", value=current("general", "default_fps"), minimum=1, elem_id="vidosser_default_fps")
-        save_btn = gr.Button("Guardar ajustes", variant="primary", elem_id="vidosser_save_settings")
+                show_overlay = loc(gr.Checkbox(label=T("show_overlay"), value=current("general", "show_overlay"), elem_id="vidosser_show_overlay"), label="show_overlay")
+                container_fs = loc(gr.Checkbox(label=T("container_fs"), value=current("general", "container_fullscreen"), elem_id="vidosser_container_fullscreen",
+                                               info=T("container_fs_info")), label="container_fs", info="container_fs_info")
+                hide_controls = loc(gr.Dropdown(label=T("hide_controls"), choices=C("hide_controls"), value=current("general", "hide_controls"),
+                                                elem_id="vidosser_hide_controls", info=T("hide_controls_info")),
+                                    label="hide_controls", info="hide_controls_info", choices=("choices", "hide_controls"))
+                thin_progress = loc(gr.Checkbox(label=T("thin_progress"), value=current("general", "show_thin_progress"), elem_id="vidosser_show_thin_progress"),
+                                    label="thin_progress")
+                default_fps = loc(gr.Number(label=T("default_fps"), value=current("general", "default_fps"), minimum=1, elem_id="vidosser_default_fps"), label="default_fps")
+        save_btn = loc(gr.Button(T("save_settings"), variant="primary", elem_id="vidosser_save_settings"), value="save_settings")
         status = gr.Markdown("", elem_id="vidosser_status")
 
         with gr.Group(elem_classes="vidosser-hidden"):
@@ -444,19 +659,41 @@ class VidosserPlugin(WAN2GPPlugin):
             bridge_req = gr.Textbox(value="", elem_id="vidosser_bridge_req", show_label=False)
             bridge_resp = gr.Textbox(value="", elem_id="vidosser_bridge_resp", show_label=False)
             bridge_btn = gr.Button("bridge", elem_id="vidosser_bridge_btn")
+            lang_box = gr.Textbox(value="", elem_id="vidosser_lang", show_label=False)     # "es" / "en", set by vidosser.js
+            lang_btn = gr.Button("lang", elem_id="vidosser_lang_btn")
 
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
                               drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify]
-        save_btn.click(fn=self._save_from_ui, inputs=inputs, outputs=[status, settings_json], show_progress="hidden").then(
+        save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
+                       js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
-        check_btn.click(fn=self._check_folder_ui, inputs=[folder], outputs=[folder_status], show_progress="hidden")
+        check_btn.click(fn=self._check_folder_ui, inputs=[folder, lang_box], outputs=[folder_status], show_progress="hidden", js=_page_lang_js(2))
         bridge_btn.click(fn=self._bridge, inputs=[bridge_req], outputs=[bridge_resp], show_progress="hidden").then(
             fn=None, inputs=[bridge_resp], outputs=None, js="(r) => { if (window.vidosser) window.vidosser.core.bridgeResponse(r); }")
+        self._i18n_reg = reg
+        lang_btn.click(fn=self._localize, inputs=[lang_box], outputs=[c for c, _t in reg], show_progress="hidden").then(
+            fn=None, inputs=[lang_box], outputs=None, js="(l) => { if (window.vidosser && window.vidosser.i18nApplied) window.vidosser.i18nApplied(l); }")
 
-    def _check_folder_ui(self, folder):
-        ok, path, message = self.check_folder(folder, create=True)
+    def _localize(self, lang):
+        """One gr.update per translatable component, in the browser's language."""
+        lang = norm_lang(lang)
+        updates = []
+        for _component, texts in self._i18n_reg:
+            upd = {}
+            for attr, key in texts.items():
+                if key == ("title",):
+                    upd[attr] = title_md(lang)
+                elif isinstance(key, tuple) and key[0] == "choices":
+                    upd[attr] = choices(key[1], lang)
+                else:
+                    upd[attr] = tr(key, lang)
+            updates.append(gr.update(**upd))
+        return updates
+
+    def _check_folder_ui(self, folder, lang="en"):
+        ok, path, message = self.check_folder(folder, create=True, lang=lang)
         return f"{'✅' if ok else '❌'} `{path}`: {message}"
 
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
@@ -465,10 +702,12 @@ class VidosserPlugin(WAN2GPPlugin):
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify")
 
     def _save_from_ui(self, *values):
-        """Inputs: one key box per KEY_ACTIONS entry, then the fields of _UI_FIELDS (same order as `inputs`)."""
+        """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
         n = len(KEY_ACTIONS)
         key_values = dict(zip((a for a, _ in KEY_ACTIONS), values[:n]))
-        return self._apply_ui_values(key_values, **dict(zip(self._UI_FIELDS, values[n:])))
+        fields = values[n:n + len(self._UI_FIELDS)]
+        lang = values[n + len(self._UI_FIELDS)] if len(values) > n + len(self._UI_FIELDS) else "en"
+        return self._apply_ui_values(key_values, lang=lang, **dict(zip(self._UI_FIELDS, fields)))
 
     def _apply_ui_values(self, key_values, keys_enabled=True, wheel_enabled=True, invert=False, shift_frames=10,
                          jump_mode="seconds", jump_seconds=0.5, jump_frames=8, sf_format="png", jpg_quality=95, sf_mode="ask",
@@ -478,48 +717,48 @@ class VidosserPlugin(WAN2GPPlugin):
                          drag_hide_cursor=True, drag_pointer_lock=True,
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
-                         no_autojump=True, jump_on_exit=True, new_notify=True):
+                         no_autojump=True, jump_on_exit=True, new_notify=True, lang="en"):
+        lang = norm_lang(lang)
         settings = load_settings()
-        keys, errors = validate_keys(key_values)
-        def number(value, label, minimum, maximum, integer):
+        keys, errors = validate_keys(key_values, lang)
+        def number(value, label_key, minimum, maximum, integer):
             try:
                 v = float(value)
             except (TypeError, ValueError):
                 v = float("nan")
             if not math.isfinite(v) or v < minimum or v > maximum:
-                errors.append(f"«{label}» debe estar entre {minimum} y {maximum}.")
+                errors.append(tr("msg_range", lang, label=tr(label_key, lang), minimum=minimum, maximum=maximum))
                 return None
             return int(round(v)) if integer else round(v, 3)
-        shift_frames = number(shift_frames, "Fotogramas con Shift + rueda", 1, 1000, True)
-        jump_seconds = number(jump_seconds, "Salto corto: segundos", 0.01, 600, False)
-        jump_frames = number(jump_frames, "Salto corto: fotogramas", 1, 100000, True)
-        jpg_quality = number(jpg_quality, "Calidad JPG", 1, 100, True)
-        default_fps = number(default_fps, "FPS si no se pueden detectar", 1, 1000, False)
-        toast_s = number(toast_s, "Duración del mensaje (segundos)", 0.5, 30, False)
-        sound_volume = number(sound_volume, "Volumen", 1, 100, True)
-        drag_ppf = number(drag_ppf, "Píxeles por fotograma al arrastrar", 1, 200, True)
-        volume_ppp = number(volume_ppp, "Píxeles por 1 % de volumen", 0.2, 50, False)
+        shift_frames = number(shift_frames, "shift_frames", 1, 1000, True)
+        jump_seconds = number(jump_seconds, "jump_seconds", 0.01, 600, False)
+        jump_frames = number(jump_frames, "jump_frames", 1, 100000, True)
+        jpg_quality = number(jpg_quality, "jpg_quality", 1, 100, True)
+        default_fps = number(default_fps, "default_fps", 1, 1000, False)
+        toast_s = number(toast_s, "toast_s", 0.5, 30, False)
+        sound_volume = number(sound_volume, "sound_volume", 1, 100, True)
+        drag_ppf = number(drag_ppf, "drag_ppf", 1, 200, True)
+        volume_ppp = number(volume_ppp, "volume_ppp", 0.2, 50, False)
         folder = str(folder or "").strip().strip('"')
         if sf_mode == "direct" or folder:
-            ok, path, message = self.check_folder(folder, create=sf_mode == "direct")
+            ok, path, message = self.check_folder(folder, create=sf_mode == "direct", lang=lang)
             if not ok:
-                errors.append(f"Carpeta `{path}`: {message}.")
+                errors.append(tr("msg_folder", lang, path=path, message=message))
         jump_modifier = str(jump_modifier or "none").lower()
         if jump_modifier not in _CHOICES[("frame_step", "wheel_jump_modifier")]:
-            errors.append("«Modificador + rueda = salto corto»: valor no válido.")
+            errors.append(tr("msg_invalid", lang, label=tr("jump_modifier", lang)))
         hide_controls = str(hide_controls or "fullscreen").lower()
         if hide_controls not in ("off", "fullscreen", "always"):
-            errors.append("«Ocultar la barra de controles del vídeo»: valor no válido.")
+            errors.append(tr("msg_invalid", lang, label=tr("hide_controls", lang)))
         drag_button = str(drag_button or "left").lower()
         if drag_button not in ("left", "right"):
-            errors.append("«Botón para arrastrar»: valor no válido.")
+            errors.append(tr("msg_invalid", lang, label=tr("drag_button", lang)))
         if errors:
-            return f"❌ No se ha guardado ({time.strftime('%H:%M:%S')}):\n\n- " + "\n- ".join(errors), gr.update()
+            return tr("msg_not_saved", lang, time=time.strftime('%H:%M:%S')) + "\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
         notes = []
         if jump_modifier == "shift":
-            notes.append(f"Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y "
-                         f"los «Fotogramas con Shift + rueda» ({shift_frames}) no se usan.")
+            notes.append(tr("msg_shift_note", lang, n=shift_frames))
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
                                       drag_invert=bool(drag_invert), drag_button=drag_button,
                                       drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock))
@@ -539,9 +778,8 @@ class VidosserPlugin(WAN2GPPlugin):
         try:
             save_settings(settings)
         except Exception as e:
-            return f"❌ No se ha podido escribir settings.json: {e}", gr.update()
-        message = (f"✅ Ajustes guardados y aplicados a las {time.strftime('%H:%M:%S')} "
-                   "(en otras pestañas del navegador ya abiertas, recarga la página).")
+            return tr("msg_write_failed", lang, error=e), gr.update()
+        message = tr("msg_saved", lang, time=time.strftime('%H:%M:%S'))
         if notes:
             message += "\n\n⚠️ " + "\n\n⚠️ ".join(notes)
         return message, json.dumps(settings)
@@ -551,12 +789,15 @@ class VidosserPlugin(WAN2GPPlugin):
         try:
             req = json.loads(raw or "{}")
         except Exception:
-            return json.dumps({"ok": False, "error": "petición no válida"})
+            return json.dumps({"ok": False, "error": tr("err_bad_request", "en")})
+        lang = norm_lang(req.get("lang"))
         try:
             if req.get("action") == "save_frame":
-                out = self.save_frame(req)
+                out = self.save_frame(req, lang)
             else:
-                out = {"ok": False, "error": "acción desconocida"}
+                out = {"ok": False, "error": tr("err_unknown_action", lang)}
+        except LocalizedError as e:
+            out = {"ok": False, "error": e.text(lang)}
         except Exception as e:
             traceback.print_exc()
             out = {"ok": False, "error": str(e)}
@@ -575,7 +816,7 @@ class VidosserPlugin(WAN2GPPlugin):
         full = urllib.parse.unquote(urllib.parse.urlsplit(str(url or "")).path)
         idx = full.find("file=")
         if idx < 0:
-            raise ValueError("este vídeo no es un archivo del servidor")
+            raise LocalizedError("err_not_server_file")
         path = full[idx + 5:]
         try:
             from shared.gradio.video_preview import _restore_preview_path
@@ -584,14 +825,14 @@ class VidosserPlugin(WAN2GPPlugin):
             pass
         real = os.path.realpath(os.path.abspath(path))
         if os.path.splitext(real)[1].lower() not in VIDEO_EXTS or not os.path.isfile(real):
-            raise ValueError("vídeo no encontrado en el servidor")
+            raise LocalizedError("err_not_found")
         for root in self._allowed_roots():
             try:
                 if os.path.commonpath([real, root]) == root:
                     return real
             except ValueError:
                 continue
-        raise ValueError("vídeo fuera de las carpetas de WanGP")
+        raise LocalizedError("err_outside")
 
     @staticmethod
     def extract_frame(source, time_seconds, frame_hint=None):
@@ -607,7 +848,7 @@ class VidosserPlugin(WAN2GPPlugin):
         from PIL import Image
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg is None:
-            raise RuntimeError("ffmpeg no disponible")
+            raise LocalizedError("err_no_ffmpeg")
         frame_no = max(0, int(frame_hint or 0))
         out = subprocess.run([ffmpeg, "-v", "error", "-nostdin", "-i", source, "-vf", f"select=eq(n\\,{frame_no})",
                               "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True, check=True)
@@ -637,14 +878,14 @@ class VidosserPlugin(WAN2GPPlugin):
             except FileExistsError:
                 k += 1
 
-    def save_frame(self, req):
+    def save_frame(self, req, lang="en"):
         settings = load_settings()["save_frame"]
         if not settings["enabled"]:
-            return {"ok": False, "error": "guardar fotograma está desactivado"}
+            return {"ok": False, "error": tr("err_disabled", lang)}
         source = self.video_path_from_url(req.get("url"))
         t = float(req.get("time", 0))
         if not math.isfinite(t) or t < 0:
-            raise ValueError("tiempo no válido")
+            raise LocalizedError("err_bad_time")
         frame_no, image = self.extract_frame(source, t, req.get("frame"))
         fmt = settings["format"]
         ext = "jpg" if fmt == "jpg" else "png"
@@ -652,9 +893,9 @@ class VidosserPlugin(WAN2GPPlugin):
         base = f"{Path(source).stem}_frame{int(frame_no):05d}"
         result = {"ok": True, "frame": int(frame_no), "width": image.width, "height": image.height, "name": f"{base}.{ext}", "source": source}
         if req.get("mode") == "direct":
-            ok, folder, message = self.check_folder(settings["folder"], create=True)
+            ok, folder, message = self.check_folder(settings["folder"], create=True, lang=lang)
             if not ok:
-                return {"ok": False, "error": f"carpeta {folder}: {message}"}
+                return {"ok": False, "error": tr("err_folder", lang, folder=folder, message=message)}
             path = self.write_unique(folder, base, ext, data)
             result.update(path=path, name=os.path.basename(path))
         else:

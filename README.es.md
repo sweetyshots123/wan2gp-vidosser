@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.1
+*[English](README.md)* · Licencia MIT · versión 1.4.2
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -100,6 +100,13 @@ Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 
 Al pulsar **Guardar ajustes** se comprueban los valores (teclas repetidas, números, carpeta), se guardan en `settings.json` dentro de la carpeta del plugin y **se aplican al momento, sin reiniciar WanGP**. Si tienes WanGP abierto en otras pestañas del navegador, recárgalas para que usen los nuevos ajustes. Si algo no es válido, no se guarda nada y se explica el motivo.
 
+## Idioma
+
+- Todos los textos de Vidosser en pantalla están **en español o en inglés, según el idioma del navegador** (`navigator.languages[0]`, el primer idioma de la configuración de idiomas del navegador): **español para cualquier `es-*`** (España, México, Argentina…) e **inglés para cualquier otro idioma** (el inglés es el idioma por defecto). No hay ninguna opción para elegirlo: cambia el idioma preferido del navegador y recarga la página.
+- Incluye la pestaña Vidosser (etiquetas, textos de ayuda, títulos de sección, opciones de las listas desplegables y botones de opción, botones, mensajes de validación y de guardado, resultado de «Comprobar carpeta») y todo lo que aparece sobre el vídeo (indicadores, mensajes, la línea de subtítulo de la pantalla completa nativa y los errores de guardado que llegan del servidor).
+- WanGP no tiene opción de idioma (su interfaz está en inglés) y Gradio 5.29, la versión que usa WanGP, no tiene API de traducción (`gr.I18n` solo existe en versiones más nuevas de Gradio). Por eso Vidosser crea su pestaña en inglés y, en un navegador en español, cambia los textos de la pestaña a español justo después de cargar la página (con un botón oculto de la pestaña, como sus otros controles ocultos). Solo cambian los textos que se muestran: los valores guardados en `settings.json` (`"fullscreen"`, `"ctrl"`, `"ask"`…) son los mismos en los dos idiomas, así que el mismo archivo sirve para ambos.
+- No se traducen: los mensajes del navegador (el aviso de Chrome «Pulsa Esc para mostrar el cursor», el diálogo «Guardar como»), los textos propios de Gradio y de WanGP, los nombres de archivo y las rutas, los detalles de errores del sistema operativo o de ffmpeg, el nombre de la pista de subtítulos «Vidosser» y los mensajes de la consola del navegador (en inglés).
+
 ## Instalación
 
 **Opción A, desde la pestaña Plugins de WanGP (recomendada):**
@@ -114,7 +121,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.1.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.2.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

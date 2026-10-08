@@ -2,6 +2,13 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-10-08
+### Added
+- **English / Spanish UI, following the browser language.** Every on-screen text of Vidosser now exists in English and Spanish and is picked from the browser's language (`navigator.languages[0]`, else `navigator.language`): Spanish for any `es-*` (`es`, `es-ES`, `es-MX`, `es-419`…), English for every other language (English is the default and the fallback). Covers the Vidosser tab (labels, help texts, section headers, dropdown / radio choices, buttons, validation and save messages, *Check folder* result) and everything drawn on the video (frame / jump / volume overlays, save / loop / new-video messages, the native-fullscreen subtitle cue, save errors returned by the server). Browser-console logs stay in English.
+### Changed
+- How it works: Gradio 5.29 (the version WanGP uses) has no `gr.I18n` and WanGP has no UI language setting, so the tab is built in English and, in a Spanish browser, `vidosser.js` writes the language into a hidden textbox of the tab and clicks a hidden button (the same pattern as the save-frame bridge); the server answers with `gr.update()`s carrying the Spanish labels, infos and choices, retried until confirmed. The same hidden textbox is sent with *Save settings* and *Check folder*, and every bridge request carries the page language, so server messages come back in the page's language. Dropdown / radio choices are `(label, value)` pairs: only the labels are translated, the values stored in `settings.json` are unchanged, so existing settings files keep working in both languages.
+- The English text is now the default everywhere (it was Spanish only). READMEs updated (English README uses the English labels; new *Language* / *Idioma* section).
+
 ## [1.4.1] - 2026-10-08
 ### Fixed
 - **Vertical volume drag in fullscreen.** In 1.4.0 the volume drag used the same Pointer Lock as the scrub and read `movementY` under the lock. Chrome on Windows reports that unreliably: when the lock starts it re-centres the hidden cursor and the first move(s) can carry a jump of up to half the screen (slamming the volume to 0 % or 100 %), and on its raw-input path it can report `buttons = 0` while the button is held, which our missed-release check would take as a release (drag ended at once). Neither happens in headless Chrome, which is why the 1.4.0 tests passed. The volume drag now never takes Pointer Lock: it reads `clientY` under pointer capture (exact, real button state; the screen gives far more travel than 0–100 %), in every fullscreen mode (Vidosser's container fullscreen, Gradio's gallery fullscreen button, native `<video>` fullscreen) and outside fullscreen.
