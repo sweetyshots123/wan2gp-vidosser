@@ -1,6 +1,6 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.3
+*[Español](README.es.md)* · MIT License · v1.4.4
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
@@ -13,7 +13,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 **Frame stepping**
 - **1 mouse-wheel notch = exactly 1 frame**: no acceleration, no skipped frames, even when you spin the wheel fast. Wheel down = next frame, wheel up = previous. **Shift + wheel = 10 frames** per notch (configurable).
 - By default the wheel steps frames **only while a video is fullscreen** (the video player's own fullscreen or the gallery's fullscreen button). Outside fullscreen the wheel scrolls the page as usual, even over a video. This can be turned off.
-- **Ctrl + wheel = short jump**: each notch jumps exactly one *short jump* (the same size as Q / W, 0.5 s by default). The modifier is configurable (Ctrl, Alt, Shift, Meta/Cmd or none). Vidosser only blocks the browser's Ctrl + wheel zoom while it is actually stepping a video; everywhere else (and outside fullscreen with the default setting) Ctrl + wheel zooms the page as usual. Trackpad pinch gestures, which browsers report as Ctrl + wheel, are accumulated so that one pinch "step" is one jump instead of dozens.
+- **Modifier + wheel** (Ctrl by default): configurable in the Vidosser tab as **Short jump** (default: one notch = one short jump, same as Q / W, 0.5 s) or **Playback speed** (each notch changes the playback rate by 0.25× between 0.25× and 2.00×; overlay `Speed 1.25×`). The wheel direction that advances frames also makes playback faster; *Invert wheel direction* flips both. The last speed can be remembered for later videos (on by default). The modifier is configurable (Ctrl, Alt, Shift, Meta/Cmd or none). Vidosser only blocks the browser's Ctrl + wheel zoom while it is actually using that gesture on a video; everywhere else (and outside fullscreen with the default setting) Ctrl + wheel zooms the page as usual. Trackpad pinch gestures, which browsers report as Ctrl + wheel, are accumulated so that one pinch "step" is one action instead of dozens.
 - **Drag to scrub**: hold the **left mouse button** (or the right one, see *drag button*) on a video and drag horizontally: every 8 px = 1 frame (configurable), drag right = forward, drag left = backward. Counting is position based and exact, so dragging back to where you started returns to the same frame. It starts only after 4 px of mostly horizontal movement, so a plain click still plays/pauses; a playing video pauses when the drag starts, and the click at the end of a drag doesn't restart it. With the **right button**, a plain right click still opens the normal context menu; the menu is blocked only when a drag actually happened. **The cursor only disappears in fullscreen, and only while you hold the left button down during a drag** (scrub or volume); outside fullscreen, with the right button, after release or when not dragging, the cursor is always visible (outside fullscreen the drag keeps working when the pointer leaves the video, via pointer capture). Vidosser also stops Chrome from hiding the cursor on its own when its controls fade out over a playing video. In fullscreen, while you scrub with the left button, the mouse is **locked and hidden** (Pointer Lock, *drag pointer lock*, on by default): the pointer can't hit the edge of the screen, so you can keep scrubbing in one long movement, and it reappears exactly where it was on release. Chrome/Edge show their own *"Press Esc to show your cursor"* banner at the top of the screen each time the lock starts; that is a browser security notice, and it goes away by itself. The lock is always released when you let go of the button, press **Esc** or switch window. If the lock is off or the browser refuses it, the drag keeps working when the pointer leaves the video (pointer capture) and the cursor is just hidden while dragging (*hide cursor while dragging*, on by default); it always comes back on release, Esc, cancel or when the window loses focus. **Shift + drag** = 10 frames per step, **Ctrl + drag** (the short-jump modifier) = one short jump per step. Works inside and outside fullscreen (not affected by *wheel only in fullscreen*), and with a finger on touch screens (horizontal swipe; vertical swipes still scroll). Not used on the video's native control bar (bottom 40 px of a video while its browser controls are shown; when Vidosser hides the controls, the whole picture is draggable), gallery thumbnails, text fields or anything other than the video picture.
 - **Vertical drag = volume** (see *Volume* below): the direction is decided once, after the first 4 px, by the dominant movement (horizontal = frames, vertical = volume, a tie counts as horizontal) and stays locked until you release the button, so a scrub that drifts doesn't touch the volume and vice versa.
 - Keyboard: **A / S** = previous / next frame (holding the key keeps stepping one frame at a time). **Q / W** = jump back / forward by 0.5 s (rounded to whole frames at the video's frame rate) or by a fixed number of frames.
@@ -69,7 +69,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 |---|---|---|
 | Next / previous frame | Wheel down / up | 1 notch = 1 frame; only in fullscreen by default |
 | Jump ×10 frames | Shift + wheel | configurable (`shift_frames`) |
-| Short jump (= Q / W) | Ctrl + wheel | modifier configurable (`wheel_jump_modifier`) |
+| Short jump (= Q / W) *or* playback speed | Ctrl + wheel | action configurable (`wheel_mod_action`: `jump` / `speed`); modifier configurable (`wheel_jump_modifier`) |
 | Scrub frames | drag horizontally on the video (left button, or right if chosen) | 8 px = 1 frame; Shift + drag = ×10, Ctrl + drag = short jumps |
 | Volume | drag vertically on the video (same button) | up = louder, 2 px = 1 % |
 | Previous frame | `A` | auto-repeat steps one frame per repeat |
@@ -114,7 +114,9 @@ Open the **Vidosser** tab in WanGP, change options, and click **Save settings**.
 | **Short jump** (W / Q and modifier + wheel) | *Short jump: unit* | seconds | *In seconds* or *In frames* |
 | | *Short jump: seconds* | 0.5 | rounded to whole frames |
 | | *Short jump: frames* | 8 | |
-| | *Modifier + wheel = short jump* | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *None* (off). With Shift, Shift + wheel does the short jump instead of the ×10 multiplier (the tab shows a note) |
+| | *Modifier + wheel* | Ctrl | Ctrl, Alt, Shift, Meta (Cmd / Win) or *None* (off). With Shift, Shift + wheel does the action below instead of the ×10 multiplier (the tab shows a note) |
+| | *Modifier + wheel does* | Short jump | *Short jump* (one notch = one short jump, same as W / Q) or *Playback speed* (±0.25× per notch, 0.25–2.00; overlay `Speed 1.25×`). Forward for frames = faster; *Invert wheel direction* flips both |
+| | *Remember the playback speed for the next videos* | on | only when the action is *Playback speed*; also after a page reload (stored in the browser) |
 | **Volume** | *Vertical drag = volume* | on | up = louder; plain click / double-click unchanged |
 | | *Pixels per 1 % of volume* | 2 | 0.2–50 |
 | | *Invert volume direction* | off | on = drag down is louder |
@@ -160,7 +162,8 @@ With a Spanish browser the same tab is shown in Spanish (*Teclas*, *Paso de foto
                   "shift_frames": 10, "invert_direction": false,
                   "drag_scrub": true, "drag_pixels_per_frame": 8, "drag_invert": false, "drag_button": "left",
                   "drag_pointer_lock": true, "drag_hide_cursor": true, "wrap": true,
-                  "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8 },
+                  "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8,
+                  "wheel_mod_action": "jump", "speed_remember": true },
   "loop":       { "enabled": true, "loop_all": true },
   "volume":     { "enabled": true, "drag_volume": true, "drag_pixels_per_percent": 2.0, "drag_invert": false, "remember": true },
   "new_video":  { "enabled": true, "no_autojump_fullscreen": true, "jump_on_fullscreen_exit": true, "notify": true },
@@ -186,7 +189,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.3.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.4.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -223,7 +226,7 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - JPG is lossy; use PNG for a bit-exact frame.
 - On macOS, system wheel acceleration can make a fast spin report more notches.
 - Keys match the character they type (`a`, `s`…), not the physical key position.
-- *Remember the volume* is stored in the browser (localStorage), not in `settings.json`.
+- *Remember the volume* and *Remember the playback speed* are stored in the browser (localStorage), not in `settings.json`.
 - New video while fullscreen: made for WanGP's output gallery when the new item is a video. If the new item is an **image**, Gradio replaces the video player with an image and that can't be prevented. If the video you watch leaves the gallery's visible list (deleted, or pushed out by WanGP's gallery file limit), the change is applied.
 
 ## Troubleshooting
@@ -236,12 +239,13 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
 - **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.3 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.4 loaded`.
 - **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.4**: modifier + wheel configurable as short jump or playback speed (±0.25×, 0.25–2.00; same invert as frames; remember speed).
 - **1.4.3**: wrap around at the ends when scrubbing / stepping / jumping (on by default; switchable).
 - **1.4.2**: every on-screen text in English or Spanish, following the browser's language (Spanish for any `es-*`, English otherwise); `settings.json` unchanged.
 - **1.4.1**: vertical volume drag fixed in fullscreen (no pointer lock for it; Windows pointer-lock quirks handled for the scrub); the cursor is only hidden while the left button is held during a drag in fullscreen (never outside fullscreen, never by Chrome's idle controls); overlay in native fullscreen as a subtitle.

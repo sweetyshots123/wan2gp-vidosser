@@ -12,7 +12,8 @@
 //   MODULE frame_step   mouse wheel and keyboard frame stepping:
 //                       * 1 wheel notch = exactly 1 frame, Shift + wheel = shift_frames
 //                         (wheel_fullscreen_only: only while fullscreen; keys always work)
-//                       * wheel_jump_modifier (Ctrl) + wheel = one short jump per notch
+//                       * wheel_jump_modifier (Ctrl) + wheel = short jump OR playback speed
+//                         (frame_step.wheel_mod_action: "jump" | "speed"; speed ±0.25, 0.25..2)
 //                       * next_frame / prev_frame (S / A), jump_forward / jump_back
 //                         (W / Q: jump_seconds converted with the video fps, or jump_frames)
 //                       * drag on the video: horizontal = scrub frames, vertical = volume
@@ -913,17 +914,54 @@
 
         // ---------------------------------------------------------- wheel
         // Plain wheel: 1 notch = 1 frame (Shift: shift_frames). Wheel + wheel_jump_modifier
-        // (default Ctrl): 1 notch = 1 short jump (same amount as Q / W). The jump modifier
-        // wins over the Shift multiplier when both are "shift". Any other Ctrl/Alt/Meta
-        // combination is left to the browser (zoom...), and so is everything that does not
-        // act on a video (no preventDefault -> Ctrl+wheel zoom keeps working elsewhere).
+        // (default Ctrl): either one short jump per notch (same as Q / W) or ±0.25 playbackRate
+        // (wheel_mod_action "jump" | "speed", default jump). The modifier wins over the Shift
+        // multiplier when both are "shift". Any other Ctrl/Alt/Meta combination is left to the
+        // browser (zoom...), and so is everything that does not act on a video.
+        // Speed: the same wheel direction that steps frames FORWARD also makes playback FASTER
+        // (invert_direction flips both together). Clamped to 0.25..2.00 in 0.25 steps. Overlay "Speed 1.25×".
+        const SPEED_MIN = 0.25, SPEED_MAX = 2, SPEED_STEP = 0.25;
+        const SPEED_STORE = "vidosser.playbackRate";
+        let rememberedSpeed = null;
+        try {
+            const r = Number(localStorage.getItem(SPEED_STORE));
+            if (localStorage.getItem(SPEED_STORE) !== null && r >= SPEED_MIN && r <= SPEED_MAX) rememberedSpeed = r;
+        } catch (_) { /* no storage */ }
+        function snapSpeed(r) {
+            const n = Math.round(Number(r) / SPEED_STEP) * SPEED_STEP;
+            return Math.max(SPEED_MIN, Math.min(SPEED_MAX, Math.round(n * 100) / 100));
+        }
+        function speedOverlay(r) {
+            return `${i18n("Speed", "Velocidad")} ${snapSpeed(r).toFixed(2)}×`;
+        }
+        function rememberSpeed(r) {
+            if (CFG.speed_remember === false) return;
+            rememberedSpeed = r;
+            try { localStorage.setItem(SPEED_STORE, String(r)); } catch (_) { /* ignore */ }
+        }
+        function setSpeed(video, deltaNotches) {
+            // same sign as frame stepping: positive notches (forward) = faster, negative = slower
+            const next = snapSpeed((Number(video.playbackRate) || 1) + deltaNotches * SPEED_STEP);
+            video.playbackRate = next;
+            rememberSpeed(next);
+            core.showOverlay(video, speedOverlay(next));
+            return next;
+        }
+        function applyRememberedSpeed(v) {
+            if (!(v instanceof HTMLVideoElement) || CFG.enabled === false || CFG.speed_remember === false || rememberedSpeed === null) return;
+            if (String(CFG.wheel_mod_action || "jump").toLowerCase() !== "speed") return;
+            if (Math.abs((v.playbackRate || 1) - rememberedSpeed) < 1e-4) return;
+            try { v.playbackRate = rememberedSpeed; } catch (_) { /* ignore */ }
+        }
+        document.addEventListener("loadedmetadata", e => applyRememberedSpeed(e.target), true);
+
         function onWheel(e) {
             if (CFG.enabled === false || !CFG.wheel_enabled) return;
             // wheel_fullscreen_only: outside fullscreen the wheel is left completely alone (page scroll / zoom)
             if (CFG.wheel_fullscreen_only && !core.fsElement()) return;
             const jm = jumpModifier();
-            const jump = !!jm && e[MODIFIERS[jm]];
-            if (!jump && (e.ctrlKey || e.metaKey || e.altKey)) return;  // keep browser zoom etc.
+            const mod = !!jm && e[MODIFIERS[jm]];
+            if (!mod && (e.ctrlKey || e.metaKey || e.altKey)) return;  // keep browser zoom etc.
             const video = core.videoForPointerEvent(e);
             if (!video) return;
             e.preventDefault();                                         // no page scroll / zoom over a video we act on
@@ -933,8 +971,12 @@
             let notches = pinch ? countPinchNotches(e) : countNotches(e);
             if (!notches) return;
             if (CFG.invert_direction) notches = -notches;
-            if (jump) queueSteps(video, 0, notches);
-            else queueSteps(video, notches * (e.shiftKey ? Math.max(1, Math.round(CFG.shift_frames)) : 1), 0);
+            if (mod) {
+                if (String(CFG.wheel_mod_action || "jump").toLowerCase() === "speed") setSpeed(video, notches);
+                else queueSteps(video, 0, notches);
+            } else {
+                queueSteps(video, notches * (e.shiftKey ? Math.max(1, Math.round(CFG.shift_frames)) : 1), 0);
+            }
         }
 
         // ------------------------------------------------------- keyboard
@@ -1190,13 +1232,17 @@
             info: v => { const i = core.getInfo(v), s = stepState(v); return { fps: i.fps, source: i.fpsSource, frames: i.frames, target: s.target }; },
             step: (v, n) => queueSteps(v, n | 0, 0),
             jump: (v, n) => queueSteps(v, 0, n | 0),
+            setSpeed: (v, notches) => setSpeed(v, notches | 0),
+            speedOf: v => snapSpeed(v && v.playbackRate),
             target: () => core.videoForKeyboard(),
         };
     })(core, V.config.frame_step = Object.assign({
         enabled: true,
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
-        wheel_jump_modifier: "ctrl",  // modifier + wheel = one short jump per notch: ctrl | alt | shift | meta | none
+        wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
+        wheel_mod_action: "jump",     // what the modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate)
+        speed_remember: true,         // keep the last playbackRate for later videos (also after reload)
         shift_frames: 10,
         invert_direction: false,
         drag_scrub: true,             // left-button drag on a video = scrub frames

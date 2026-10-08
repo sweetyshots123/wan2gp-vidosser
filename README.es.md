@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.3
+*[English](README.md)* · Licencia MIT · versión 1.4.4
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -10,7 +10,7 @@ Con la rueda del ratón:
 - **1 muesca de la rueda = exactamente 1 fotograma** (sin aceleración ni saltos: si giras rápido 7 muescas, avanza 7 fotogramas).
 - **Rueda abajo = fotograma siguiente**, rueda arriba = fotograma anterior.
 - **Shift + rueda = 10 fotogramas** por muesca.
-- **Ctrl + rueda = salto corto**: cada muesca da exactamente un *salto corto* (el mismo que Q / W, 0,5 s por defecto). El modificador se elige en la pestaña Vidosser (Ctrl, Alt, Shift, Meta/Cmd o ninguno). Vidosser solo bloquea el zoom del navegador con Ctrl + rueda cuando de verdad está moviendo un vídeo; en el resto de la página (y, con el ajuste por defecto, fuera de la pantalla completa) Ctrl + rueda hace zoom como siempre. Los gestos de pellizco del trackpad, que el navegador envía como Ctrl + rueda, se acumulan para que un gesto equivalga a un salto y no a decenas.
+- **Modificador + rueda** (Ctrl por defecto): configurable en la pestaña Vidosser como **Salto corto** (por defecto: una muesca = un salto corto, igual que Q / W, 0,5 s) o **Velocidad de reproducción** (cada muesca cambia la velocidad 0,25× entre 0,25× y 2,00×; indicador `Velocidad 1.25×`). El sentido de la rueda que avanza fotogramas también hace la reproducción más rápida; *Invertir sentido de la rueda* invierte los dos. La última velocidad se puede recordar para los siguientes vídeos (activado por defecto). El modificador se elige en la pestaña (Ctrl, Alt, Shift, Meta/Cmd o ninguno). Vidosser solo bloquea el zoom del navegador con Ctrl + rueda cuando de verdad usa ese gesto sobre un vídeo; en el resto de la página (y, con el ajuste por defecto, fuera de la pantalla completa) Ctrl + rueda hace zoom como siempre. Los gestos de pellizco del trackpad, que el navegador envía como Ctrl + rueda, se acumulan para que un gesto equivalga a una acción y no a decenas.
 - **Por defecto la rueda solo pasa fotogramas a pantalla completa** (la del vídeo o la de la galería); ahí funciona en cualquier punto de la pantalla. Fuera de la pantalla completa la rueda desplaza la página como siempre, aunque estés encima de un vídeo. Se puede cambiar en la pestaña Vidosser («Rueda solo a pantalla completa»): desactivado, la rueda pasa fotogramas con el ratón encima de cualquier vídeo.
 
 Arrastrando sobre el vídeo:
@@ -92,7 +92,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
 - **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar, ocultar el cursor mientras arrastras y dar la vuelta en los extremos.
-- **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
+- **Salto corto y modificador + rueda**: medida (segundos o fotogramas), segundos, fotogramas, el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno), qué hace el **modificador + rueda** (*Salto corto* o *Velocidad de reproducción*) y **recordar la velocidad**. Si eliges Shift, Shift + rueda hace la acción elegida en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
 - **Volumen**: arrastrar en vertical = volumen, píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
 - **Bucle**: repetir todos los vídeos en bucle.
 - **Vídeo nuevo**: a pantalla completa, no saltar al vídeo nuevo; al salir de la pantalla completa, mostrar el vídeo nuevo; aviso «Nuevo vídeo listo».
@@ -122,7 +122,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.3.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.4.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -175,7 +175,9 @@ Sección `frame_step`:
 | `enabled` | true | activar/desactivar esta herramienta |
 | `wheel_enabled` | true | paso de fotogramas con la rueda |
 | `wheel_fullscreen_only` | true | la rueda solo pasa fotogramas a pantalla completa (fuera de ella desplaza la página) |
-| `wheel_jump_modifier` | `"ctrl"` | modificador + rueda = salto corto: `"ctrl"`, `"alt"`, `"shift"`, `"meta"` o `"none"` |
+| `wheel_jump_modifier` | `"ctrl"` | tecla del modificador + rueda: `"ctrl"`, `"alt"`, `"shift"`, `"meta"` o `"none"` |
+| `wheel_mod_action` | `"jump"` | qué hace el modificador + rueda: `"jump"` (salto corto) o `"speed"` (velocidad ±0,25×, 0,25–2,00; el sentido que avanza fotogramas también acelera; `invert_direction` invierte los dos) |
+| `speed_remember` | true | recordar la velocidad de reproducción para los siguientes vídeos (solo con `wheel_mod_action` = `"speed"`; se guarda en el navegador) |
 | `shift_frames` | 10 | fotogramas por muesca con Shift |
 | `invert_direction` | false | `true` = rueda arriba avanza |
 | `drag_scrub` | true | arrastrar sobre el vídeo = pasar fotogramas |
@@ -247,5 +249,5 @@ Sección `save_frame`:
 - JPG comprime con pérdida; para un fotograma idéntico al original usa PNG.
 - En macOS la aceleración de la rueda del sistema puede hacer que un giro rápido cuente más muescas.
 - Las teclas se comparan por el carácter que producen (`a`, `s`...), no por su posición en el teclado.
-- «Recordar el volumen» se guarda en el navegador, no en `settings.json`.
+- «Recordar el volumen» y «Recordar la velocidad de reproducción» se guardan en el navegador, no en `settings.json`.
 - Vídeo nuevo a pantalla completa: funciona con la galería de vídeos generados de WanGP (vídeo nuevo sustituyendo a un vídeo). Si lo nuevo es una **imagen**, la galería cambia el reproductor por una imagen y eso no se puede evitar. Si el vídeo que ves sale de la lista visible de la galería (por ejemplo, con el límite de archivos de la galería de WanGP), se aplica el cambio.

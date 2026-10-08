@@ -2,6 +2,11 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.4] - 2026-10-08
+### Added
+- **Modifier + wheel action** (`frame_step.wheel_mod_action`, default `"jump"`): choose what holding the configured modifier (Ctrl by default) while turning the wheel does — **Short jump** (unchanged from ≤ 1.4.3: one notch = one short jump, same as W / Q) or **Playback speed** (each notch changes `video.playbackRate` by 0.25, clamped to 0.25–2.00). Overlay `Speed 1.25×` / `Velocidad 1.25×`. The wheel direction that steps frames **forward** also makes playback **faster**; `frame_step.invert_direction` flips both together. Plain wheel and Shift + wheel stay as before. Older `settings.json` files get `"jump"`.
+- **Remember playback speed** (`frame_step.speed_remember`, default on): when the action is *Playback speed*, the last rate set with the wheel is applied to videos loaded later (also after a reload; stored in the browser). Only used while the action is speed.
+
 ## [1.4.3] - 2026-10-08
 ### Added
 - **Wrap around at the ends** (`frame_step.wrap`, default on): when drag-scrubbing, turning the wheel, stepping with A / S or jumping with Q / W / modifier + wheel, going past the last frame continues at the first one, and going back past the first continues at the last one — as many times as you like in one drag or held key. The overlay shows the wrapped frame number and a ↻ mark when a wrap happened. Off = stop at the first / last frame (≤ 1.4.2 behaviour). The A-B segment loop is unchanged. Older `settings.json` files get the option from the defaults (on).

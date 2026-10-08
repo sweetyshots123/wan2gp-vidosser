@@ -7,6 +7,7 @@ Current tools (modules):
     one frame) or with the keyboard (S / A = next / previous frame,
     W / Q = jump forward / back), also in fullscreen. Wrap (default on): past the last
     frame continues at the first and before the first at the last (drag, wheel, keys).
+    Modifier + wheel: short jump or playback speed (±0.25×, 0.25–2), same invert as frames.
   * volume: click-and-hold on the video and drag vertically = volume (up = louder).
   * new_video: in fullscreen, a newly generated video doesn't replace the one you watch.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
@@ -42,7 +43,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.3"
+PLUGIN_VERSION = "1.4.4"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -136,14 +137,30 @@ _TEXT = {
     "volume_remember": ("Remember the volume for the next videos", "Recordar el volumen para los siguientes vídeos"),
     "volume_remember_info": ("Also after reloading the page (stored in this browser).", "También tras recargar la página (se guarda en este navegador)."),
     # short jump
-    "sec_jump": ("### Short jump\nHow far each **W / Q** press and each wheel notch with the chosen modifier jumps.",
-                 "### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido."),
+    "sec_jump": ("### Short jump and modifier + wheel\nHow far each **W / Q** press jumps, and what the chosen modifier + wheel does "
+                 "(short jump or playback speed).",
+                 "### Salto corto y modificador + rueda\nCuánto salta cada pulsación de **W / Q**, y qué hace el modificador + rueda "
+                 "(salto corto o velocidad de reproducción)."),
     "jump_mode": ("Short jump: unit", "Salto corto: medida"),
     "jump_seconds": ("Short jump: seconds", "Salto corto: segundos"),
     "jump_frames": ("Short jump: frames", "Salto corto: fotogramas"),
-    "jump_modifier": ("Modifier + wheel = short jump", "Modificador + rueda = salto corto"),
-    "jump_modifier_info": ("One notch = one short jump. If you choose Shift, Shift + wheel does the short jump instead of the Shift multiplier.",
-                           "Una muesca = un salto corto. Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift."),
+    "jump_modifier": ("Modifier + wheel", "Modificador + rueda"),
+    "jump_modifier_info": ("Which key you hold while turning the wheel. If you choose Shift, Shift + wheel does the action below "
+                           "instead of the «Frames with Shift + wheel» multiplier.",
+                           "Qué tecla mantienes al girar la rueda. Si eliges Shift, Shift + rueda hace la acción de abajo "
+                           "en lugar del multiplicador «Fotogramas con Shift + rueda»."),
+    "wheel_mod_action": ("Modifier + wheel does", "El modificador + rueda hace"),
+    "wheel_mod_action_info": ("«Short jump»: one notch = one short jump (same as W / Q). «Playback speed»: each notch changes the "
+                              "playback speed by 0.25× between 0.25× and 2.00×. The wheel direction that steps frames forward also "
+                              "makes playback faster; «Invert wheel direction» flips both.",
+                              "«Salto corto»: una muesca = un salto corto (igual que W / Q). «Velocidad de reproducción»: cada muesca "
+                              "cambia la velocidad 0,25× entre 0,25× y 2,00×. El sentido de la rueda que avanza fotogramas también "
+                              "hace la reproducción más rápida; «Invertir sentido de la rueda» invierte los dos."),
+    "speed_remember": ("Remember the playback speed for the next videos", "Recordar la velocidad de reproducción para los siguientes vídeos"),
+    "speed_remember_info": ("Only when modifier + wheel is set to playback speed. Also after reloading the page (stored in this browser).",
+                            "Solo cuando el modificador + rueda está en velocidad de reproducción. También tras recargar la página (se guarda en este navegador)."),
+    "ch_jump": ("Short jump", "Salto corto"),
+    "ch_speed": ("Playback speed", "Velocidad de reproducción"),
     # loop
     "sec_loop": ("### Loop\n**L** turns the loop of the current video on or off. **I** / **O** mark the start / end of an "
                  "A-B segment at the current frame: when playing, only that part repeats (frame accurate). **U** clears the segment. "
@@ -209,8 +226,8 @@ _TEXT = {
     "msg_folder": ("Folder `{path}`: {message}.", "Carpeta `{path}`: {message}."),
     "msg_invalid": ("«{label}»: invalid value.", "«{label}»: valor no válido."),
     "msg_not_saved": ("❌ Not saved ({time}):", "❌ No se ha guardado ({time}):"),
-    "msg_shift_note": ("Note: the short-jump modifier is Shift, so Shift + wheel does a short jump and the «Frames with Shift + wheel» ({n}) are not used.",
-                       "Nota: el modificador del salto corto es Shift, así que Shift + rueda hace un salto corto y los «Fotogramas con Shift + rueda» ({n}) no se usan."),
+    "msg_shift_note": ("Note: the modifier + wheel key is Shift, so Shift + wheel does «{action}» and the «Frames with Shift + wheel» ({n}) are not used.",
+                       "Nota: el modificador + rueda es Shift, así que Shift + rueda hace «{action}» y los «Fotogramas con Shift + rueda» ({n}) no se usan."),
     "msg_write_failed": ("❌ Could not write settings.json: {error}", "❌ No se ha podido escribir settings.json: {error}"),
     "msg_saved": ("✅ Settings saved and applied at {time} (in other browser tabs that are already open, reload the page).",
                   "✅ Ajustes guardados y aplicados a las {time} (en otras pestañas del navegador ya abiertas, recarga la página)."),
@@ -281,10 +298,11 @@ DEFAULT_SETTINGS = {
         "wheel_enabled": True,      # one wheel notch = one frame
         "wheel_fullscreen_only": True,  # wheel steps only while a video (or its container) is fullscreen;
                                         # outside fullscreen the wheel scrolls the page as usual
-        "wheel_jump_modifier": "ctrl",  # modifier + wheel = one short jump (jump_*) per notch:
-                                        # "ctrl" | "alt" | "shift" | "meta" | "none"
+        "wheel_jump_modifier": "ctrl",  # modifier + wheel key: "ctrl" | "alt" | "shift" | "meta" | "none"
+        "wheel_mod_action": "jump", # what modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate, 0.25..2)
+        "speed_remember": True,     # keep the last playbackRate for later videos (also after reload); only used when action is speed
         "shift_frames": 10,         # frames per notch while Shift is held
-        "invert_direction": False,  # False: wheel down = next frame, wheel up = previous frame
+        "invert_direction": False,  # False: wheel down = next frame / faster, wheel up = previous / slower
         "drag_scrub": True,         # hold the left button on a video and drag horizontally = step frames
         "drag_pixels_per_frame": 8, # horizontal pixels per frame while dragging (1..200)
         "drag_invert": False,       # False: drag right = forward, drag left = backward
@@ -331,6 +349,7 @@ DEFAULT_SETTINGS = {
     },
 }
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
+            ("frame_step", "wheel_mod_action"): ("jump", "speed"),
             ("save_frame", "format"): ("png", "jpg"),
             ("save_frame", "mode"): ("ask", "direct"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
@@ -342,6 +361,7 @@ _CHOICE_KEYS = {
     "drag_button": [("ch_left", "left"), ("ch_right", "right")],
     "jump_modifier": [("ch_ctrl", "ctrl"), ("ch_alt", "alt"), ("ch_shift", "shift"), ("ch_meta", "meta"), ("ch_none", "none")],
     "jump_mode": [("ch_seconds", "seconds"), ("ch_frames", "frames")],
+    "wheel_mod_action": [("ch_jump", "jump"), ("ch_speed", "speed")],
     "format": [("ch_png", "png"), ("ch_jpg", "jpg")],
     "mode": [("ch_ask", "ask"), ("ch_direct", "direct")],
 }
@@ -615,6 +635,12 @@ class VidosserPlugin(WAN2GPPlugin):
                 jump_modifier = loc(gr.Dropdown(label=T("jump_modifier"), choices=C("jump_modifier"), value=current("frame_step", "wheel_jump_modifier"),
                                                 elem_id="vidosser_wheel_jump_modifier", info=T("jump_modifier_info")),
                                     label="jump_modifier", info="jump_modifier_info", choices=("choices", "jump_modifier"))
+            with gr.Row():
+                wheel_mod_action = loc(gr.Dropdown(label=T("wheel_mod_action"), choices=C("wheel_mod_action"), value=current("frame_step", "wheel_mod_action"),
+                                                   elem_id="vidosser_wheel_mod_action", info=T("wheel_mod_action_info")),
+                                       label="wheel_mod_action", info="wheel_mod_action_info", choices=("choices", "wheel_mod_action"))
+                speed_remember = loc(gr.Checkbox(label=T("speed_remember"), value=current("frame_step", "speed_remember"), elem_id="vidosser_speed_remember",
+                                                 info=T("speed_remember_info")), label="speed_remember", info="speed_remember_info")
         with gr.Group():
             loc(gr.Markdown(T("sec_loop"), elem_id="vidosser_sec_loop"), value="sec_loop")
             loop_all = loc(gr.Checkbox(label=T("loop_all"), value=current("loop", "loop_all"), elem_id="vidosser_loop_all"), label="loop_all")
@@ -679,7 +705,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -713,7 +739,8 @@ class VidosserPlugin(WAN2GPPlugin):
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
-                  "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap")
+                  "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
+                  "wheel_mod_action", "speed_remember")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -731,7 +758,8 @@ class VidosserPlugin(WAN2GPPlugin):
                          drag_hide_cursor=True, drag_pointer_lock=True,
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
-                         no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True, lang="en"):
+                         no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
+                         wheel_mod_action="jump", speed_remember=True, lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -767,15 +795,19 @@ class VidosserPlugin(WAN2GPPlugin):
         drag_button = str(drag_button or "left").lower()
         if drag_button not in ("left", "right"):
             errors.append(tr("msg_invalid", lang, label=tr("drag_button", lang)))
+        wheel_mod_action = str(wheel_mod_action or "jump").lower()
+        if wheel_mod_action not in _CHOICES[("frame_step", "wheel_mod_action")]:
+            errors.append(tr("msg_invalid", lang, label=tr("wheel_mod_action", lang)))
         if errors:
             return tr("msg_not_saved", lang, time=time.strftime('%H:%M:%S')) + "\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
         notes = []
         if jump_modifier == "shift":
-            notes.append(tr("msg_shift_note", lang, n=shift_frames))
+            notes.append(tr("msg_shift_note", lang, n=shift_frames, action=tr("ch_" + ("speed" if wheel_mod_action == "speed" else "jump"), lang)))
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
                                       drag_invert=bool(drag_invert), drag_button=drag_button,
-                                      drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock), wrap=bool(wrap))
+                                      drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock), wrap=bool(wrap),
+                                      wheel_mod_action=wheel_mod_action, speed_remember=bool(speed_remember))
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)
