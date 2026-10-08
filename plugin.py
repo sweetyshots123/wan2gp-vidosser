@@ -351,6 +351,7 @@ DEFAULT_SETTINGS = {
         "drag_pixels_per_percent": 2.0,  # vertical px per 1 % of volume (0.2..50)
         "drag_invert": False,       # False: drag up = louder
         "drag_button": "left",      # "left" | "right"; = frame_step.drag_button: axis decides, else this button = volume only
+                                    # (missing in settings.json -> same as frame_step.drag_button, i.e. unchanged behaviour)
         "remember": True,           # keep the last volume for the next videos (also after a page reload)
     },
     "new_video": {
@@ -468,6 +469,10 @@ def load_settings(path=None):
     settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
     settings["frame_step"]["drag_pixels_per_frame"] = max(1, min(200, settings["frame_step"]["drag_pixels_per_frame"]))
     settings["volume"]["drag_pixels_per_percent"] = max(0.2, min(50.0, settings["volume"]["drag_pixels_per_percent"]))
+    # 1.4.6: files without volume.drag_button keep the volume drag on the scrub button (as up to 1.4.5)
+    user_volume = user_settings.get("volume") if isinstance(user_settings.get("volume"), dict) else {}
+    if "drag_button" not in user_volume:
+        settings["volume"]["drag_button"] = settings["frame_step"]["drag_button"]
     _resolve_new_key_conflicts(settings["keys"], {a for a, _l in KEY_ACTIONS if a in user_keys})
     return settings
 

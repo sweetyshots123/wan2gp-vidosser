@@ -771,7 +771,7 @@
         drag_volume: true,            // click-and-hold + vertical drag on a video = volume (up = louder)
         drag_pixels_per_percent: 2,   // vertical px per 1 % of volume
         drag_invert: false,           // false: drag up = louder
-        drag_button: "left",          // "left" | "right" (1.4.6); = frame_step.drag_button: axis decides, else volume only
+        // drag_button: "left" | "right" (1.4.6; unset = frame_step.drag_button): same button = axis decides, else volume only
         remember: true,               // keep the last volume for the next videos (also after reload)
     }, SETTINGS.volume || {}));
 
@@ -1040,7 +1040,7 @@
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
-        const volButton = () => String((VOL && VOL.config.drag_button) || "left").toLowerCase() === "right" ? 2 : 0;
+        const volButton = () => { const b = VOL && VOL.config.drag_button; return b ? (String(b).toLowerCase() === "right" ? 2 : 0) : dragButton(); };   // unset: the scrub button
         function dragUnit(e) {
             const jm = jumpModifier();
             if (jm && e[MODIFIERS[jm]]) return { frames: 0, jumps: 1 };
