@@ -22,7 +22,8 @@
 //                         (drag / wheel / keys / jumps; off = clamp at the ends)
 //   MODULE volume       volume helpers for the vertical drag (overlay, clamp, unmute, remember)
 //   MODULE container_fs video fullscreen on a container (not native) so overlays/toasts show
-//   MODULE loop         loop all videos, loop toggle (L), A-B segment loop (I / O, U = clear)
+//   MODULE loop         loop all videos, loop toggle (L), A-B segment loop (I / O, U = clear),
+//                       loop.mode "boomerang" (ping-pong: emulated reverse at the end, also A-B; B = per video)
 //   MODULE new_video    in fullscreen, a newly generated video does not replace the one being
 //                       watched in the output gallery (no_autojump_fullscreen)
 //   MODULE save_frame   save_frame_as (D, or middle click on the video): saves the displayed frame (PNG/JPG), extracted
@@ -574,6 +575,13 @@
             if (!q.inflight || !video.seeking && performance.now() - q.at > 1000) issueSeek(video, q);
         }
         function seekPending(video) { const q = seeks.get(video); return !!(q && q.inflight); }
+        // Immediate seek (currentTime reads the new time at once), aborting an in-flight one: only for
+        // putting a reversing boomerang video on the frame that is on screen before a user action.
+        function seekNow(video, t) { const q = seekState(video); q.desired = t; issueSeek(video, q); }
+        // Hooks run before a user action on a video reads its frame (key action, frame step, save, press).
+        const userHooks = [];
+        function onUserAction(fn) { userHooks.push(fn); }
+        function beforeUserAction(video, kind) { for (const h of userHooks) { try { h(video, kind); } catch (_) { /* ignore */ } } }
 
         // Resolves once the frame on screen is final (no seek in flight or queued).
         function settled(video, timeoutMs = 4000) {
@@ -606,6 +614,7 @@
             const video = videoForKeyboard();
             if (!video) return;                                         // nothing to act on: leave the key alone
             e.preventDefault();
+            beforeUserAction(video, action);
             actions[action](video, e);                                  // auto-repeat = one action per event
         }
 
@@ -679,7 +688,8 @@
 
         return { CFG, KEYS, IS_FIREFOX, getInfo, ensureFps, lastFrameOf, probeMedia: probeMp4,
                  fsElement, eligible, isVisible, biggestVideoIn, videoAtPoint, videoForPointerEvent,
-                 videoForKeyboard, touch, typingOrModal, showOverlay, fpsLabel, settled, seekTo, seekPending,
+                 videoForKeyboard, touch, typingOrModal, showOverlay, fpsLabel, settled, seekTo, seekPending, seekNow,
+                 onUserAction, beforeUserAction,
                  toast, flash, sound, nativeVideoFs,
                  registerAction, bridge, bridgeResponse,
                  middlePress: null,                    // video under an ongoing middle-button press (save_frame)
@@ -700,6 +710,7 @@
         jump_back: "q",
         save_frame_as: "d",
         toggle_loop: "l",
+        toggle_boomerang: "b",
         mark_in: "i",
         mark_out: "o",
         clear_segment: "u",
@@ -901,6 +912,7 @@
         }
 
         function queueSteps(video, frames, jumps) {
+            core.beforeUserAction(video, "step");                       // boomerang reverse: from the frame on screen
             const s = stepState(video);
             s.pending += frames || 0;
             s.pendingJumps += jumps || 0;
@@ -1308,6 +1320,7 @@
         let busy = false;
         async function saveFrameAs(video) {
             if (CFG.enabled === false || busy) return;
+            core.beforeUserAction(video, "save_frame_as");               // boomerang reverse: save the frame on screen
             busy = true;
             try {
                 if (!video.paused) video.pause();
@@ -1654,13 +1667,25 @@
         // ---------------------------------------------------------- loop all / toggle
         const origLoop = new WeakMap();          // loop attribute before we touched the element
         const override = new Map();              // src -> loop forced by the toggle key
+        const bOverride = new Map();             // src -> boomerang forced by the toggle_boomerang key (B)
         const srcOf = v => v.currentSrc || v.src || "";
 
-        function applyLoop(v) {
-            if (!(v instanceof HTMLVideoElement)) return;
+        // Whether the video should loop (loop_all / L / its own attribute). With boomerang on, the
+        // element's own `loop` attribute is kept OFF so the end of the video is seen ("ended") and
+        // playback can turn round there; the logical loop state stays in loopWanted().
+        function loopWanted(v) {
             if (!origLoop.has(v)) origLoop.set(v, v.loop);
             const src = srcOf(v);
-            const want = override.has(src) ? override.get(src) : (CFG.enabled !== false && CFG.loop_all ? true : origLoop.get(v));
+            return override.has(src) ? override.get(src) : (CFG.enabled !== false && CFG.loop_all ? true : origLoop.get(v));
+        }
+        function boomerangOn(v) {
+            if (CFG.enabled === false) return false;
+            const src = srcOf(v);
+            return bOverride.has(src) ? bOverride.get(src) : String(CFG.mode || "normal").toLowerCase() === "boomerang";
+        }
+        function applyLoop(v) {
+            if (!(v instanceof HTMLVideoElement)) return;
+            const want = !!loopWanted(v) && !boomerangOn(v);
             if (v.loop !== want) v.loop = want;
         }
         const applyAll = () => document.querySelectorAll("video").forEach(applyLoop);
@@ -1675,7 +1700,7 @@
 
         core.registerAction("toggle_loop", v => {
             if (CFG.enabled === false) return;
-            const on = !v.loop;
+            const on = !loopWanted(v);
             override.set(srcOf(v), on);
             applyLoop(v);
             core.toast(on ? i18n("Loop on (this video)", "Bucle activado (este vídeo)") : i18n("Loop off (this video)", "Bucle desactivado (este vídeo)"), "info", 1800);
@@ -1746,6 +1771,10 @@
             const s = segOf(v), info = core.getInfo(v);
             if (!ready(s) || !info.fps || v.paused) return;
             const fps = info.fps, f = frameAt(mediaTime, fps);
+            if (f > s.out && boomerangOn(v)) {                          // boomerang: turn round at `out`
+                if (!v.seeking && !core.seekPending(v)) startReverse(v, s.out, 0.5);
+                return;
+            }
             if (f > s.out || f < s.in) { seekIn(v, s, fps); return; }
             const rate = v.playbackRate || 1, fd = 1000 / fps / rate;
             const outEnds = (displayAt || performance.now()) + ((s.out + 1) / fps - mediaTime) * 1000 / rate;
@@ -1754,7 +1783,9 @@
             timers.set(v, setTimeout(() => {
                 timers.delete(v);
                 const s2 = segOf(v);
-                if (ready(s2) && !v.paused) seekIn(v, s2, fps);
+                if (!ready(s2) || v.paused) return;
+                if (boomerangOn(v)) startReverse(v, s2.out, 0.5);        // `out` shown: play it backwards from here
+                else seekIn(v, s2, fps);
             }, Math.max(0, outEnds - margin - performance.now())));
         }
         function watch(v) {
@@ -1784,12 +1815,335 @@
                 else check(v, v.currentTime, performance.now());     // paused on `out`: no rVFC for that frame, arm the wrap now
             });
             v.addEventListener("ended", () => {                    // `out` = last frame: loop instead of stopping
-                if (seekWhilePaused) return;
+                if (seekWhilePaused || boomerangOn(v)) return;      // boomerang: the module-level "ended" handler turns round
                 const s = segOf(v), info = core.getInfo(v);
                 if (ready(s) && info.fps) { seekIn(v, s, info.fps); v.play().catch(() => {}); }
             });
         }
         document.addEventListener("play", e => { if (e.target instanceof HTMLVideoElement && segOf(e.target)) watch(e.target); }, true);
+
+        // ------------------------------------------------------ boomerang (ping-pong)
+        // loop.mode "boomerang" (or B for one video): at the end (last frame, or `out` of an A-B
+        // segment) playback turns round and goes BACKWARDS to the start (frame 0, or `in`), then
+        // forwards again, and so on. Only while the video loops (loop_all / L) or has an A-B segment.
+        // Chrome can't play backwards (negative playbackRate is not supported), so reverse is emulated
+        // on a PAUSED video (a paused video plays no audio: reverse is silent, muted / volume untouched),
+        // driven by a requestAnimationFrame clock that moves a position backwards at the current
+        // playbackRate (the 1.4.4 speed, read live). Two ways to put the frame under it on screen:
+        //  * frame cache (smooth): while a boomerang video plays, every presented frame is copied into
+        //    an ImageBitmap (rVFC + createImageBitmap, at most 1280 px and ~256 MB per video, other idle
+        //    videos' caches are freed). Reverse draws those frames on a canvas laid exactly over the
+        //    picture, on time, like normal playback. The paused video follows underneath with a
+        //    background seek at most 4 times a second (progress bar, cache holes).
+        //  * exact seeks (fallback: frame not cached yet, native <video> fullscreen where nothing can be
+        //    drawn above the video, picture partly off screen): each frame is a seek, the next one only
+        //    after the previous has finished (no pile-up), so a slow decoder skips frames but keeps the
+        //    speed. Backwards seeks decode from the previous keyframe, so this is choppier on long-GOP /
+        //    high resolution videos; the frames it shows are cached for the next round.
+        // Interaction: any seek that is not ours (frame step, wheel, Q/W, scrub, progress bar) ends reverse
+        // and leaves the video paused there (play = forwards from there). As the video is technically
+        // paused while reversing, play / Space / click on it means "pause" for the user: reverse stops on
+        // the current frame; play again = continue backwards. Before a key action / pointer press / save
+        // the element is first moved to the frame on screen, so what reads currentTime sees that frame.
+        const rev = new WeakMap();               // video -> running reverse state
+        const pausedRev = new WeakSet();         // paused by the user while reversing (play = backwards again)
+        const endPark = new WeakSet();           // paused on the last frame by a seek (Chrome fired "ended")
+        const ownPlay = new WeakSet();           // play() issued by the bounce at the start
+        const seekPaused = new WeakMap();        // last seek happened while paused
+        const ownTarget = new WeakMap();         // time of our latest reverse seek (also after reverse stopped)
+        // Chrome: a seek of a paused video into the LAST frame is followed by a second, internal seek to
+        // `duration` (+ "ended"). Such a seek is not the user's.
+        const atEnd = v => Number.isFinite(v.duration) && v.currentTime >= v.duration - 1e-3;
+        // Gradio's video player (bind:currentTime) writes its last known time back into the element right
+        // after a pause: a seek within ±2 frames shortly after one of OUR pauses is not the user's.
+        const ourPause = new WeakMap();
+        function pauseOurs(v) {
+            const fps = core.getInfo(v).fps || 30;
+            ourPause.set(v, { t: performance.now(), f: frameAt(v.currentTime, fps), fps });
+            if (!v.paused) v.pause();
+        }
+        function echoOfOurPause(v) {
+            const op = ourPause.get(v);
+            return !!op && performance.now() - op.t < 400 && Math.abs(frameAt(v.currentTime, op.fps) - op.f) <= 2;
+        }
+        const boomerangActive = v => boomerangOn(v) && (ready(segOf(v)) || !!loopWanted(v));
+        const boundOf = v => { const s = segOf(v); return ready(s) ? s.in : 0; };
+        const reversing = v => { const st = rev.get(v); return !!(st && st.running); };
+
+        // ---- frame cache
+        const CACHE_BUDGET = 256 * 1024 * 1024, CACHE_MAX_SIDE = 1280;
+        const caches = new Map();                // video -> { src, w, h, frames: Map(frame -> ImageBitmap), busy }
+        function freeCache(v) {
+            const c = caches.get(v);
+            if (!c) return;
+            caches.delete(v);
+            for (const bm of c.frames.values()) { try { bm.close(); } catch (_) { /* gone */ } }
+            c.frames.clear();
+        }
+        function cacheOf(v, create) {
+            let c = caches.get(v);
+            const src = srcOf(v);
+            if (c && c.src !== src) { freeCache(v); c = null; }
+            if (c || !create) return c || null;
+            const info = core.getInfo(v), last = core.lastFrameOf(v, info);
+            if (!info.fps || !Number.isFinite(last) || !v.videoWidth || !v.videoHeight || typeof createImageBitmap !== "function") return null;
+            for (const other of [...caches.keys()]) if (!other.isConnected || (other.paused && !reversing(other))) freeCache(other);
+            const vw = v.videoWidth, vh = v.videoHeight;
+            const k = Math.min(1, CACHE_MAX_SIDE / Math.max(vw, vh), Math.sqrt(CACHE_BUDGET / ((last + 1) * vw * vh * 4)));
+            c = { src, w: Math.max(2, Math.round(vw * k)), h: Math.max(2, Math.round(vh * k)), frames: new Map(), busy: new Set() };
+            caches.set(v, c);
+            return c;
+        }
+        function capture(v, f) {
+            const c = cacheOf(v, true);
+            if (!c || c.frames.has(f) || c.busy.has(f)) return;
+            c.busy.add(f);
+            createImageBitmap(v, { resizeWidth: c.w, resizeHeight: c.h, resizeQuality: "medium" }).then(bm => {
+                c.busy.delete(f);
+                if (caches.get(v) === c && c.src === srcOf(v) && !c.frames.has(f)) c.frames.set(f, bm); else bm.close();
+            }, () => c.busy.delete(f));
+        }
+        const capturing = new WeakSet();
+        function startCapture(v) {
+            if (capturing.has(v) || typeof v.requestVideoFrameCallback !== "function") return;
+            capturing.add(v);
+            const cb = (now, meta) => {
+                if (!v.isConnected || !boomerangActive(v)) { capturing.delete(v); if (!v.isConnected || !boomerangOn(v)) freeCache(v); return; }
+                const fps = core.getInfo(v).fps;
+                if (fps && meta && typeof meta.mediaTime === "number") capture(v, frameAt(meta.mediaTime, fps));
+                v.requestVideoFrameCallback(cb);
+            };
+            v.requestVideoFrameCallback(cb);
+        }
+        document.addEventListener("play", e => { if (e.target instanceof HTMLVideoElement && boomerangActive(e.target)) startCapture(e.target); }, true);
+
+        // ---- canvas laid over the picture
+        const canvases = new WeakMap(), lastDrawn = new WeakMap();
+        function pictureRectOf(v) {
+            const r = v.getBoundingClientRect();
+            let x = r.left, y = r.top, w = r.width, h = r.height;
+            if (v.videoWidth && v.videoHeight) {
+                const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+                w = v.videoWidth * k; h = v.videoHeight * k; x += (r.width - w) / 2; y += (r.height - h) / 2;
+            }
+            return { x, y, w, h, r };
+        }
+        function canvasUsable(v) {
+            const fs = core.fsElement();
+            if (fs === v || (fs && !fs.contains(v)) || !core.isVisible(v)) return false;   // native fullscreen: nothing can be drawn above
+            const r = v.getBoundingClientRect();
+            return r.width > 0 && r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1;
+        }
+        function draw(v, st, f) {
+            const c = caches.get(v), bm = c && c.frames.get(f);
+            if (!bm) return false;
+            let cv = canvases.get(v);
+            if (!cv) {
+                cv = document.createElement("canvas");
+                cv.className = "vidosser-reverse";
+                cv.style.cssText = "position:fixed;z-index:2147483643;pointer-events:none;display:none;";
+                canvases.set(v, cv);
+            }
+            const host = core.fsElement() || document.body;
+            if (cv.parentNode !== host) host.appendChild(cv);
+            if (cv.width !== c.w || cv.height !== c.h) { cv.width = c.w; cv.height = c.h; }
+            const p = pictureRectOf(v);
+            Object.assign(cv.style, { left: p.x + "px", top: p.y + "px", width: p.w + "px", height: p.h + "px", display: "block" });
+            cv.getContext("2d").drawImage(bm, 0, 0, c.w, c.h);
+            lastDrawn.set(v, f);
+            st.canvas = true; st.drawn++;
+            return true;
+        }
+        function hideCanvas(v) { const cv = canvases.get(v); if (cv) cv.style.display = "none"; }
+        // keep the canvas until the video itself shows the right frame (end of the pending seek), then remove it
+        function releaseCanvas(v) {
+            const cv = canvases.get(v);
+            if (!cv || cv.style.display === "none") return;
+            if (!v.seeking && !core.seekPending(v)) { hideCanvas(v); return; }
+            let done = false;
+            const fin = () => { if (done) return; done = true; v.removeEventListener("seeked", onSeeked); if (!reversing(v)) hideCanvas(v); };
+            const onSeeked = () => setTimeout(() => { if (!v.seeking && !core.seekPending(v)) fin(); }, 0);
+            v.addEventListener("seeked", onSeeked);
+            setTimeout(fin, 1500);
+        }
+
+        // ---- reverse clock
+        function seekOwn(v, st, f, now) {
+            st.vf = f; st.seeks++; st.seekAt = now;
+            const t = (f + 0.4) / st.fps;                                // 0.4: our seeks are told apart from frame steps (0.5)
+            ownTarget.set(v, t);
+            core.seekTo(v, t);
+        }
+        // how: "release" (default: canvas stays until the next seek ends), "sync" (first move the video to the
+        // frame on screen), "now" (hide the canvas at once)
+        function stopReverse(v, how) {
+            const st = rev.get(v);
+            if (!st) return null;
+            st.running = false; cancelAnimationFrame(st.raf); rev.delete(v);
+            if (how === "sync" && st.canvas && st.vf !== st.shown) seekOwn(v, st, st.shown, performance.now());
+            if (how === "now") hideCanvas(v); else if (how !== "keep") releaseCanvas(v);
+            return st;
+        }
+        function playForward(v) {
+            ownPlay.add(v);
+            const p = v.play();
+            if (p && p.catch) p.catch(() => ownPlay.delete(v));
+        }
+        function topFrame(v, info) {
+            const last = core.lastFrameOf(v, info);
+            const f = frameAt(v.currentTime, info.fps);
+            return Number.isFinite(last) ? Math.min(last, f) : Math.max(0, f - (v.ended ? 1 : 0));
+        }
+        // fromFrame is on screen; hold = fraction of a frame it stays before the next one down
+        function startReverse(v, fromFrame, hold) {
+            const info = core.getInfo(v);
+            if (!info.fps) return;
+            stopReverse(v, "keep"); pausedRev.delete(v); endPark.delete(v);
+            clearTimeout(timers.get(v)); timers.delete(v);
+            if (!v.paused) pauseOurs(v);
+            const fps = info.fps, now = performance.now(), last = core.lastFrameOf(v, info);
+            const cur = frameAt(v.currentTime, fps);
+            const st = { running: true, fps, pos: (fromFrame + Math.min(0.999, Math.max(0.001, hold))) / fps, shown: fromFrame,
+                         vf: Number.isFinite(last) ? Math.min(cur, last) : cur, seekAt: 0, prev: now, t0: now, raf: 0,
+                         seeks: 0, drawn: 0, bounce: false, canvas: false };
+            rev.set(v, st);
+            startCapture(v);
+            // never seek INTO the last frame (Chrome snaps it to `duration` and fires "ended"): from the end, go
+            // straight to the frame below; otherwise make sure `fromFrame` is on screen
+            if (fromFrame === last && (cur >= last || atEnd(v))) st.vf = last;
+            else if (fromFrame === last) { st.pos = fromFrame / fps; st.shown = fromFrame - 1; if (canvasUsable(v)) draw(v, st, fromFrame - 1); seekOwn(v, st, fromFrame - 1, now); }
+            else if (cur !== fromFrame) { st.shown = fromFrame; if (canvasUsable(v)) draw(v, st, fromFrame); seekOwn(v, st, fromFrame, now); }
+            st.raf = requestAnimationFrame(t => tick(v, st, t));
+        }
+        // One step of the reverse clock; returns false once reverse is over. Called on every animation
+        // frame and also straight from "seeked" (the next seek goes out without waiting for a frame).
+        function step(v, st, now) {
+            if (!st.running || rev.get(v) !== st) return false;
+            if (!v.isConnected) { stopReverse(v, "now"); return false; }
+            if (!boomerangActive(v)) { stopReverse(v, "sync"); playForward(v); return false; }   // mode / B / L / segment changed
+            const dt = Math.min(250, Math.max(0, now - st.prev));     // capped: a hidden tab doesn't jump on return
+            st.prev = now;
+            st.pos -= dt / 1000 * (Number(v.playbackRate) || 1);
+            const bound = boundOf(v);
+            const raw = Math.floor(st.pos * st.fps + 1e-6);
+            if (st.pos * st.fps <= bound + 1e-6) st.bounce = true;     // the start frame has had its full duration
+            const f = Math.min(st.shown, Math.max(bound, raw));      // never upwards, never below the start
+            const idle = !v.seeking && !core.seekPending(v) && v.readyState >= 2;
+            const c = caches.get(v);
+            const cached = !!(c && c.src === srcOf(v) && c.frames.has(f)) && canvasUsable(v);
+            // 1. the picture
+            if (cached) { if (f !== st.shown || !st.canvas) { draw(v, st, f); st.shown = f; } }
+            else if (st.canvas && (!canvasUsable(v) || (idle && st.vf === f))) { hideCanvas(v); st.canvas = false; st.shown = st.vf; }
+            // 2. the (hidden or visible) video itself
+            if (idle && st.vf !== f && !(cached && f !== bound && now - st.seekAt < 250)) {
+                seekOwn(v, st, f, now);
+                if (!st.canvas) st.shown = f;
+            }
+            // 3. start reached, on screen and in the video: forwards again
+            if (st.bounce && st.shown === bound && st.vf === bound && idle) { stopReverse(v, "now"); playForward(v); return false; }
+            return true;
+        }
+        function tick(v, st, now) {
+            if (step(v, st, now)) st.raf = requestAnimationFrame(t => tick(v, st, t));
+        }
+        document.addEventListener("seeked", e => {
+            const v = e.target, st = v instanceof HTMLVideoElement && rev.get(v);
+            // after the core queue's own "seeked" handler (registered earlier on the element) has run
+            if (st && st.running) setTimeout(() => { if (step(v, st, performance.now()) === false) cancelAnimationFrame(st.raf); }, 0);
+        }, true);
+        // Before a key action / step / save / pointer press on a reversing video: put the element on the frame
+        // that is on screen (currentTime updates at once), so the action reads that frame. Steps end reverse
+        // (direction resets to forwards); save and A-B marks pause it (play = backwards again).
+        core.onUserAction((v, kind) => {
+            const st = rev.get(v);
+            if (!st || !st.running) return;
+            if (st.vf !== st.shown || v.seeking || core.seekPending(v)) {
+                st.vf = st.shown; st.seekAt = performance.now();
+                const t = (st.shown + 0.4) / st.fps;
+                ownTarget.set(v, t);
+                core.seekNow(v, t);
+            }
+            if (/^(step|next_frame|prev_frame|jump_forward|jump_back)$/.test(kind)) stopReverse(v);
+            else if (/^(save_frame_as|mark_in|mark_out)$/.test(kind)) { stopReverse(v); pausedRev.add(v); }
+        });
+        window.addEventListener("pointerdown", e => {
+            const v = core.videoForPointerEvent ? core.videoForPointerEvent(e) : null;
+            if (v && reversing(v)) core.beforeUserAction(v, "pointer");
+        }, { capture: true, passive: true });
+
+        document.addEventListener("seeking", e => {
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement)) return;
+            if (atEnd(v) && v.paused) return;                           // Chrome's own snap to `duration` (see atEnd)
+            seekPaused.set(v, v.paused);
+            const t = ownTarget.get(v);
+            if (t !== undefined && Math.abs(v.currentTime - t) < 1e-4) return;   // one of our reverse seeks
+            if (v.paused && echoOfOurPause(v)) return;                 // the player re-applying its time after our pause
+            if (rev.has(v)) stopReverse(v);                             // the user took over: stay paused there
+            if (v.paused) { pausedRev.delete(v); endPark.delete(v); }
+        }, true);
+        document.addEventListener("play", e => {
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement)) return;
+            seekPaused.delete(v);
+            if (ownPlay.has(v)) { ownPlay.delete(v); return; }
+            if (reversing(v)) {                                         // play / Space / click while reversing = pause
+                pauseOurs(v); stopReverse(v, "sync"); pausedRev.add(v);
+                core.showOverlay(v, i18n("Paused (Boomerang, backwards)", "Pausa (Boomerang, hacia atrás)"));
+                return;
+            }
+            const info = core.getInfo(v);
+            if (pausedRev.has(v)) {
+                pausedRev.delete(v);
+                if (boomerangActive(v) && info.fps) {                   // continue backwards from this frame
+                    pauseOurs(v); startReverse(v, topFrame(v, info), 0.5);
+                    core.showOverlay(v, i18n("Boomerang: backwards", "Boomerang: hacia atrás"));
+                    return;
+                }
+            }
+            if (endPark.has(v)) {                                       // stepped onto the last frame, then play: backwards
+                endPark.delete(v);
+                if (boomerangActive(v) && !ready(segOf(v)) && info.fps) {
+                    const last = core.lastFrameOf(v, info);
+                    pauseOurs(v);
+                    if (Number.isFinite(last)) startReverse(v, last, 0.5);  // play() already went to 0: shows last - 1 at once
+                }
+            }
+        }, true);
+        document.addEventListener("ended", e => {
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement) || !boomerangOn(v)) return;
+            if (seekPaused.get(v)) { if (boomerangActive(v)) endPark.add(v); return; }   // a paused seek landed on the end
+            if (!boomerangActive(v)) return;
+            const info = core.getInfo(v);
+            if (!info.fps) return;
+            const s = segOf(v);
+            startReverse(v, ready(s) ? s.out : topFrame(v, info), 0.02);
+        }, true);
+        const resetVideo = e => {
+            const v = e.target;
+            if (!(v instanceof HTMLVideoElement)) return;
+            stopReverse(v, "now"); pausedRev.delete(v); endPark.delete(v); freeCache(v);
+        };
+        document.addEventListener("emptied", resetVideo, true);
+        document.addEventListener("loadstart", resetVideo, true);
+
+        core.registerAction("toggle_boomerang", v => {
+            if (CFG.enabled === false) return;
+            const on = !boomerangOn(v);
+            bOverride.set(srcOf(v), on);
+            applyLoop(v);
+            if (!on) {
+                pausedRev.delete(v); endPark.delete(v);
+                if (reversing(v)) { stopReverse(v, "sync"); playForward(v); }
+                freeCache(v);
+            } else if (!v.paused) startCapture(v);
+            const msg = on ? i18n("Boomerang on (this video)", "Boomerang activado (este vídeo)")
+                           : i18n("Boomerang off (this video)", "Boomerang desactivado (este vídeo)");
+            const note = on && !boomerangActive(v) ? i18n(" · the loop of this video is off", " · el bucle de este vídeo está desactivado") : "";
+            core.toast(msg + note, "info", 2000);
+            core.showOverlay(v, "Boomerang: " + (on ? i18n("on", "sí") : i18n("off", "no")));
+        });
 
         // ---------------------------------------------------------- segment marker bar
         // Thin bar on the bottom edge of the video picture: whole timeline faint, the A-B
@@ -1835,11 +2189,25 @@
         return {
             config: CFG, segments,
             segment: v => { const s = segOf(v); return s ? { in: s.in, out: s.out } : null; },
-            onSettings: applyAll,
+            boomerang: {
+                on: boomerangOn, active: boomerangActive, reversing,
+                pausedBackwards: v => pausedRev.has(v),
+                stats: v => { const st = rev.get(v); return st ? { seeks: st.seeks, drawn: st.drawn, canvas: st.canvas, ms: performance.now() - st.t0, shown: st.shown } : null; },
+                cached: v => { const c = caches.get(v); return c ? { frames: c.frames.size, w: c.w, h: c.h } : null; },
+                freeCache,
+                canvasFrame: v => { const cv = canvases.get(v); return cv && cv.style.display !== "none" ? lastDrawn.get(v) : null; },
+                start: (v, from) => startReverse(v, from, 0.5),
+            },
+            loopWanted,
+            onSettings: () => {
+                applyAll();
+                document.querySelectorAll("video").forEach(v => { if (!boomerangOn(v)) { pausedRev.delete(v); endPark.delete(v); freeCache(v); } });
+            },
         };
     })(core, V.config.loop = Object.assign({
         enabled: true,
         loop_all: true,           // every <video> plays in loop
+        mode: "normal",           // "normal" | "boomerang" (end -> backwards -> start -> forwards; also between A and B)
     }, SETTINGS.loop || {}));
 
     // =======================================================================

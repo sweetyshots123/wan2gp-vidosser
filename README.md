@@ -1,6 +1,6 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.4
+*[Español](README.es.md)* · MIT License · v1.4.5
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
@@ -58,6 +58,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 
 **Loop**
 - **L** turns looping on/off for the current video. *Loop all videos* (on by default) makes every video loop, including videos that appear later; turning it off restores each video's own setting.
+- **Boomerang** (*Loop mode* in the Vidosser tab, or **B** for the current video): instead of starting again at the beginning, a looping video plays backwards from the last frame to the first, then forwards again, like a bounce. With an A-B segment it bounces between A and B. Going backwards is silent (the video is paused; sound returns when it goes forwards) and follows the playback speed (0.25–2.00×). Backwards uses the frames remembered while the video played forwards, so it is as smooth as forwards from the first bounce on; the very first time after loading, or in the video's native fullscreen, it seeks frame by frame (smooth on small clips, choppier on big ones). Play/pause while going backwards pauses it and play continues backwards; a frame step, scrub or seek stops it there (play then goes forwards); play on a paused last frame goes backwards.
 - **A-B segment**: **I** marks the start (in) and **O** the end (out) at the current frame; playback then repeats exactly frames in…out (frame-accurate, using `requestVideoFrameCallback`), also when out is the last frame. Marking out before in swaps them; moving one end past the other end of an existing segment starts a new segment. **U** clears the segment. Pressing play outside the segment starts at in. Frame stepping is never restricted to the segment.
 - Segments are per video (by file) and kept while the page is open. A thin (3 px) orange line on the top edge of the picture shows the segment's position in the clip, so nothing covers the bottom of the picture. Messages confirm each action: *Loop start: frame N*, *Loop end: frame N*, *Loop cleared*.
 
@@ -78,6 +79,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 | Jump forward | `W` | |
 | Save frame | `D` or middle click on the video | PNG/JPG, ask or direct mode |
 | Loop on/off (this video) | `L` | |
+| Boomerang on/off (this video) | `B` | needs the video to loop (or an A-B segment) |
 | Segment start / end | `I` / `O` | A-B loop at the current frame |
 | Clear segment | `U` | |
 | Fullscreen on / off | double-click the video | enters outside fullscreen, exits inside it (also native); or WanGP's player fullscreen button |
@@ -97,6 +99,7 @@ Open the **Vidosser** tab in WanGP, change options, and click **Save settings**.
 | | *Jump forward* / *Jump back* | `W` / `Q` | |
 | | *Save frame* | `D` | |
 | | *Loop on/off (this video)* | `L` | |
+| | *Boomerang on/off (this video)* | `B` | |
 | | *A-B segment start* / *end* | `I` / `O` | |
 | | *Clear A-B segment* | `U` | |
 | | *Keyboard shortcuts enabled* | on | |
@@ -122,6 +125,7 @@ Open the **Vidosser** tab in WanGP, change options, and click **Save settings**.
 | | *Invert volume direction* | off | on = drag down is louder |
 | | *Remember the volume for the next videos* | on | also after a page reload (stored in the browser) |
 | **Loop** | *Loop all videos* | on | applied live, also to videos added later |
+| | *Loop mode* | Normal (back to the start) | *Boomerang (forwards and backwards)*: bounce at the end (and between A and B); `B` switches it per video |
 | **New video** | *In fullscreen, don't jump to the new video* | on | only while a gallery video is fullscreen; outside fullscreen WanGP jumps as usual |
 | | *When leaving fullscreen, show the new video* | on | what WanGP would have done |
 | | *«New video ready» message* | on | not possible in native fullscreen |
@@ -157,14 +161,14 @@ With a Spanish browser the same tab is shown in Spanish (*Teclas*, *Paso de foto
   "general":    { "default_fps": 16, "min_video_size": 100, "show_overlay": true, "overlay_ms": 1200, "container_fullscreen": true,
                   "hide_controls": "fullscreen", "show_thin_progress": true },
   "keys":       { "enabled": true, "next_frame": "s", "prev_frame": "a", "jump_forward": "w", "jump_back": "q", "save_frame_as": "d",
-                  "toggle_loop": "l", "mark_in": "i", "mark_out": "o", "clear_segment": "u" },
+                  "toggle_loop": "l", "toggle_boomerang": "b", "mark_in": "i", "mark_out": "o", "clear_segment": "u" },
   "frame_step": { "enabled": true, "wheel_enabled": true, "wheel_fullscreen_only": true, "wheel_jump_modifier": "ctrl",
                   "shift_frames": 10, "invert_direction": false,
                   "drag_scrub": true, "drag_pixels_per_frame": 8, "drag_invert": false, "drag_button": "left",
                   "drag_pointer_lock": true, "drag_hide_cursor": true, "wrap": true,
                   "jump_mode": "seconds", "jump_seconds": 0.5, "jump_frames": 8,
                   "wheel_mod_action": "jump", "speed_remember": true },
-  "loop":       { "enabled": true, "loop_all": true },
+  "loop":       { "enabled": true, "loop_all": true, "mode": "normal" },
   "volume":     { "enabled": true, "drag_volume": true, "drag_pixels_per_percent": 2.0, "drag_invert": false, "remember": true },
   "new_video":  { "enabled": true, "no_autojump_fullscreen": true, "jump_on_fullscreen_exit": true, "notify": true },
   "save_frame": { "enabled": true, "format": "png", "jpg_quality": 95, "mode": "ask", "folder": "", "middle_click_save": true,
@@ -189,7 +193,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.4.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.5.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -217,6 +221,7 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - In a video's **native fullscreen** (the fullscreen button in the browser's control bar of the video), the wheel, keys and middle click work, but browsers don't allow drawing over a natively fullscreen `<video>`: the overlay (frame, volume, save, loop) is shown as a subtitle line at the top left, but there are no big messages, flash, thin progress bar or loop bar; saves are also confirmed by the sound. For the subtitle Vidosser adds a "Vidosser" subtitles track to the video (and hides Chrome's captions button on that video if it had no captions of its own). Chrome always shows its controls on a natively fullscreen video, so Vidosser hides them there with CSS (when *hide control bar* is not *No*). Double-click the video instead (with *fullscreen with overlays* on), or use the gallery's own fullscreen button (top right of the gallery).
 - A-B looping relies on seeking back just before frame out+1 would be shown. It is frame-accurate in Chrome/Edge (tested at 16 and 24 fps); on a heavily loaded machine or in browsers without `requestVideoFrameCallback` an occasional extra frame can flash before the wrap.
 - Loop segments are kept only while the page is open (not saved to disk).
+- Boomerang: browsers can't play video backwards, so Vidosser emulates it with the video paused (no sound backwards). Remembered frames take up to about 256 MB of browser memory for the video being watched (big videos are remembered downscaled to 1280 px, so backwards looks slightly softer than forwards on them). Before the frames are remembered, and in the video's native fullscreen, backwards seeks every frame: depending on the clip (resolution, keyframe spacing) and the computer that can show only a few frames per second.
 - Drag to scrub uses the chosen button on the video picture, so the video's own drag gestures there (none in Chrome/Firefox by default) are replaced while it is on. Seeking with the native progress bar is unchanged. Touch scrubbing was tested with emulated touch in Chrome, not on a real phone/tablet.
 - Right-button drag: on **Windows** the context menu opens on release, so it is simply skipped after a drag. On **macOS and Linux** browsers open the context menu as soon as the right button is pressed, so a right-button drag usually isn't possible there: use the left button.
 - Pointer lock: Chrome/Edge show the *"Press Esc to show your cursor"* banner every time a drag starts the lock; browsers don't let a page hide it. Turn *Lock the pointer while dragging* off if it bothers you (the cursor is then only hidden, and the drag stops at the screen edge).
@@ -239,12 +244,13 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
 - **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.4 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.5 loaded`.
 - **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.5**: Boomerang loop mode (forwards then backwards, also between A and B; `B` per video; silent backwards at the playback speed).
 - **1.4.4**: modifier + wheel configurable as short jump or playback speed (±0.25×, 0.25–2.00; same invert as frames; remember speed).
 - **1.4.3**: wrap around at the ends when scrubbing / stepping / jumping (on by default; switchable).
 - **1.4.2**: every on-screen text in English or Spanish, following the browser's language (Spanish for any `es-*`, English otherwise); `settings.json` unchanged.

@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.4
+*[English](README.md)* · Licencia MIT · versión 1.4.5
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -84,17 +84,18 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 ## Bucle (`loop`)
 
 - **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (activado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
+- **Boomerang** («Modo de bucle» en la pestaña Vidosser, o **B** para el vídeo actual): en lugar de volver al principio, un vídeo en bucle va hacia atrás desde el último fotograma hasta el primero y luego otra vez hacia delante, como un rebote. Con un segmento A-B rebota entre A y B. Hacia atrás va sin sonido (el vídeo está en pausa; el sonido vuelve al ir hacia delante) y sigue la velocidad de reproducción (0,25–2,00×). Hacia atrás usa los fotogramas guardados mientras el vídeo iba hacia delante, así que desde el primer rebote es tan fluido como hacia delante; la primera vez tras cargarlo, o en la pantalla completa nativa del vídeo, salta fotograma a fotograma (fluido en clips pequeños, a saltos en los grandes). Play/pausa mientras va hacia atrás lo pausa y el play sigue hacia atrás; un paso de fotograma, un arrastre o un salto en la barra lo para ahí (el play sigue hacia delante); el play en el último fotograma en pausa va hacia atrás.
 - **Segmento A-B**: **I** marca el inicio y **O** el final en el fotograma actual. Al reproducir se repiten exactamente los fotogramas del inicio al final (exacto al fotograma, con `requestVideoFrameCallback`), también si el final es el último fotograma. Si marcas el final antes que el inicio, se intercambian; si mueves un extremo de un segmento ya completo más allá del otro, empieza un segmento nuevo. **U** borra el segmento. Si das al play fuera del segmento, empieza en el inicio. Los pasos de fotograma (rueda y teclas) no se limitan al segmento.
 - El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una línea naranja fina (3 px) en el borde superior de la imagen indica dónde está el segmento dentro del clip, así que no tapa la parte de abajo. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
 
 ## Pestaña de ajustes «Vidosser»
 
 Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
-- **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
+- **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, B, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
 - **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar, ocultar el cursor mientras arrastras y dar la vuelta en los extremos.
 - **Salto corto y modificador + rueda**: medida (segundos o fotogramas), segundos, fotogramas, el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno), qué hace el **modificador + rueda** (*Salto corto* o *Velocidad de reproducción*) y **recordar la velocidad**. Si eliges Shift, Shift + rueda hace la acción elegida en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
 - **Volumen**: arrastrar en vertical = volumen, píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
-- **Bucle**: repetir todos los vídeos en bucle.
+- **Bucle**: repetir todos los vídeos en bucle y **modo de bucle** (*Normal (vuelve al principio)* o *Boomerang (adelante y atrás)*).
 - **Vídeo nuevo**: a pantalla completa, no saltar al vídeo nuevo; al salir de la pantalla completa, mostrar el vídeo nuevo; aviso «Nuevo vídeo listo».
 - **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
 - **Indicador y pantalla completa**: mostrar el indicador, pantalla completa con indicadores y mensajes, ocultar la barra de controles del vídeo, barra de progreso fina y los fps que se usan si no se pueden detectar.
@@ -122,7 +123,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.4.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.5.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -164,6 +165,7 @@ Sección `keys` (una tecla por acción, sin distinguir mayúsculas; no actúan c
 | `jump_back` | `"q"` | salto atrás |
 | `save_frame_as` | `"d"` | guardar el fotograma actual |
 | `toggle_loop` | `"l"` | bucle sí/no del vídeo actual |
+| `toggle_boomerang` | `"b"` | Boomerang sí/no del vídeo actual |
 | `mark_in` | `"i"` | inicio del segmento A-B |
 | `mark_out` | `"o"` | final del segmento A-B |
 | `clear_segment` | `"u"` | borrar el segmento A-B |
@@ -197,6 +199,7 @@ Sección `loop`:
 |---|---|---|
 | `enabled` | true | activar/desactivar esta herramienta |
 | `loop_all` | true | todos los vídeos en bucle |
+| `mode` | `"normal"` | `"normal"` = al final vuelve al principio; `"boomerang"` = al final va hacia atrás hasta el principio y vuelve a empezar hacia delante (también entre A y B) |
 
 Sección `volume`:
 
@@ -241,6 +244,7 @@ Sección `save_frame`:
 - Arrastrar con el botón derecho: en **Windows** el menú contextual se abre al soltar, así que tras un arrastre simplemente no aparece. En **macOS y Linux** el navegador abre el menú nada más pulsar el botón derecho, así que ahí normalmente no se puede arrastrar con él: usa el izquierdo.
 - Bloqueo del puntero: Chrome/Edge muestran el aviso «Pulsa Esc para mostrar el cursor» cada vez que un arrastre activa el bloqueo, y una página no lo puede quitar. Si te molesta, desactiva «Bloquear el puntero al arrastrar» (el cursor solo se oculta y el arrastre se para en el borde de la pantalla).
 - Los segmentos del bucle solo se guardan mientras la página está abierta.
+- Boomerang: el navegador no sabe reproducir vídeo hacia atrás, así que Vidosser lo imita con el vídeo en pausa (sin sonido hacia atrás). Los fotogramas guardados ocupan hasta unos 256 MB de memoria del navegador para el vídeo que estás viendo (los vídeos grandes se guardan reducidos a 1280 px, así que hacia atrás se ven un poco menos nítidos). Antes de tenerlos guardados, y en la pantalla completa nativa del vídeo, hacia atrás se busca cada fotograma: según el clip (resolución, distancia entre fotogramas clave) y el equipo puede verse a pocos fotogramas por segundo.
 - Si eliges «Ninguno» como modificador del salto corto, Ctrl + rueda hace zoom en el navegador como siempre.
 - El clic central guarda al soltar el botón. Si lo mantienes pulsado más de unos 5 segundos en modo «Preguntar», el navegador ya no deja abrir el diálogo y el fotograma se descarga como una descarga normal.
 - Con el ratón de algunos fabricantes, el clic de la rueda puede estar asignado a otra función en su software (por ejemplo, Logitech Options). En ese caso el navegador no recibe el clic central.

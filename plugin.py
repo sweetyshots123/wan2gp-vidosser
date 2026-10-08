@@ -11,7 +11,8 @@ Current tools (modules):
   * volume: click-and-hold on the video and drag vertically = volume (up = louder).
   * new_video: in fullscreen, a newly generated video doesn't replace the one you watch.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
-    loop (frame accurate), U = clear the segment.
+    loop (frame accurate), U = clear the segment; loop.mode normal | boomerang (ping-pong,
+    also between A and B; B = boomerang on/off for the current video).
   * container_fs: video fullscreen on its container so overlays / messages stay visible.
   * save_frame: D (or a middle click / wheel click on the video) = save the displayed frame as PNG/JPG, extracted server-side from
     the source video with WanGP's own decoder (lossless, exact frame), either with
@@ -43,7 +44,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.4"
+PLUGIN_VERSION = "1.4.5"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -68,6 +69,7 @@ _TEXT = {
     "key_jump_back": ("Jump back", "Salto atrás"),
     "key_save_frame_as": ("Save frame", "Guardar fotograma"),
     "key_toggle_loop": ("Loop on/off (this video)", "Bucle on/off (este vídeo)"),
+    "key_toggle_boomerang": ("Boomerang on/off (this video)", "Boomerang sí/no (este vídeo)"),
     "key_mark_in": ("A-B segment start", "Inicio del segmento A-B"),
     "key_mark_out": ("A-B segment end", "Final del segmento A-B"),
     "key_clear_segment": ("Clear A-B segment", "Borrar segmento A-B"),
@@ -164,11 +166,24 @@ _TEXT = {
     # loop
     "sec_loop": ("### Loop\n**L** turns the loop of the current video on or off. **I** / **O** mark the start / end of an "
                  "A-B segment at the current frame: when playing, only that part repeats (frame accurate). **U** clears the segment. "
-                 "The segment belongs to each video and is kept while the page is open. The keys are changed above, in «Keys».",
+                 "The segment belongs to each video and is kept while the page is open. **B** turns Boomerang on or off for the current video. "
+                 "The keys are changed above, in «Keys».",
                  "### Bucle\n**L** activa o desactiva el bucle del vídeo actual. **I** / **O** marcan el inicio / final de un "
                  "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
-                 "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. Las teclas se cambian arriba, en «Teclas»."),
+                 "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. **B** activa o desactiva el Boomerang del vídeo actual. "
+                 "Las teclas se cambian arriba, en «Teclas»."),
     "loop_all": ("Loop all videos", "Repetir todos los vídeos en bucle"),
+    "loop_mode": ("Loop mode", "Modo de bucle"),
+    "loop_mode_info": ("Normal: at the end it starts again from the beginning. Boomerang: at the end it plays backwards to the "
+                       "beginning, then forwards again, like a bounce (also between A and B of a segment). Backwards playback "
+                       "is silent; it reuses the frames seen while playing forwards, so it can be less smooth the first time or in the "
+                       "video's native fullscreen.",
+                       "Normal: al final vuelve a empezar desde el principio. Boomerang: al final va hacia atrás hasta el "
+                       "principio y luego otra vez hacia delante, como un rebote (también entre A y B de un segmento). Hacia atrás "
+                       "va sin sonido; usa los fotogramas vistos al ir hacia delante, así que puede ser menos fluido la primera vez o en "
+                       "la pantalla completa nativa del vídeo."),
+    "ch_loop_normal": ("Normal (back to the start)", "Normal (vuelve al principio)"),
+    "ch_boomerang": ("Boomerang (forwards and backwards)", "Boomerang (adelante y atrás)"),
     # new video
     "sec_new_video": ("### New video\nWhen WanGP finishes a video, the gallery normally jumps to that new video. Outside fullscreen it keeps doing so as usual.",
                       "### Vídeo nuevo\nCuando WanGP termina un vídeo, normalmente la galería salta a ese vídeo nuevo. "
@@ -267,8 +282,8 @@ class LocalizedError(Exception):
 
 # (action, English label); localized labels: tr("key_<action>", lang)
 KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as",
-                                                   "toggle_loop", "mark_in", "mark_out", "clear_segment")]
-LOOP_ACTIONS = ("toggle_loop", "mark_in", "mark_out", "clear_segment")
+                                                   "toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")]
+LOOP_ACTIONS = ("toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")
 
 DEFAULT_SETTINGS = {
     "general": {
@@ -289,6 +304,7 @@ DEFAULT_SETTINGS = {
         "jump_back": "q",
         "save_frame_as": "d",
         "toggle_loop": "l",         # loop on/off for the current video
+        "toggle_boomerang": "b",    # boomerang (ping-pong) loop on/off for the current video
         "mark_in": "i",             # A-B segment loop: start = current frame
         "mark_out": "o",            # A-B segment loop: end = current frame
         "clear_segment": "u",       # remove the A-B segment
@@ -319,6 +335,7 @@ DEFAULT_SETTINGS = {
     "loop": {
         "enabled": True,
         "loop_all": True,           # every video plays in loop
+        "mode": "normal",           # "normal": end -> start | "boomerang": end -> backwards -> start -> forwards (also A-B)
     },
     "volume": {
         "enabled": True,
@@ -350,6 +367,7 @@ DEFAULT_SETTINGS = {
 }
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("frame_step", "wheel_mod_action"): ("jump", "speed"),
+            ("loop", "mode"): ("normal", "boomerang"),
             ("save_frame", "format"): ("png", "jpg"),
             ("save_frame", "mode"): ("ask", "direct"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
@@ -362,6 +380,7 @@ _CHOICE_KEYS = {
     "jump_modifier": [("ch_ctrl", "ctrl"), ("ch_alt", "alt"), ("ch_shift", "shift"), ("ch_meta", "meta"), ("ch_none", "none")],
     "jump_mode": [("ch_seconds", "seconds"), ("ch_frames", "frames")],
     "wheel_mod_action": [("ch_jump", "jump"), ("ch_speed", "speed")],
+    "loop_mode": [("ch_loop_normal", "normal"), ("ch_boomerang", "boomerang")],
     "format": [("ch_png", "png"), ("ch_jpg", "jpg")],
     "mode": [("ch_ask", "ask"), ("ch_direct", "direct")],
 }
@@ -643,7 +662,10 @@ class VidosserPlugin(WAN2GPPlugin):
                                                  info=T("speed_remember_info")), label="speed_remember", info="speed_remember_info")
         with gr.Group():
             loc(gr.Markdown(T("sec_loop"), elem_id="vidosser_sec_loop"), value="sec_loop")
-            loop_all = loc(gr.Checkbox(label=T("loop_all"), value=current("loop", "loop_all"), elem_id="vidosser_loop_all"), label="loop_all")
+            with gr.Row():
+                loop_all = loc(gr.Checkbox(label=T("loop_all"), value=current("loop", "loop_all"), elem_id="vidosser_loop_all"), label="loop_all")
+                loop_mode = loc(gr.Dropdown(label=T("loop_mode"), choices=C("loop_mode"), value=current("loop", "mode"), elem_id="vidosser_loop_mode",
+                                            info=T("loop_mode_info")), label="loop_mode", info="loop_mode_info", choices=("choices", "loop_mode"))
         with gr.Group():
             loc(gr.Markdown(T("sec_new_video"), elem_id="vidosser_sec_new_video"), value="sec_new_video")
             with gr.Row():
@@ -705,7 +727,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -740,7 +762,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember")
+                  "wheel_mod_action", "speed_remember", "loop_mode")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -759,7 +781,7 @@ class VidosserPlugin(WAN2GPPlugin):
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
-                         wheel_mod_action="jump", speed_remember=True, lang="en"):
+                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -798,6 +820,9 @@ class VidosserPlugin(WAN2GPPlugin):
         wheel_mod_action = str(wheel_mod_action or "jump").lower()
         if wheel_mod_action not in _CHOICES[("frame_step", "wheel_mod_action")]:
             errors.append(tr("msg_invalid", lang, label=tr("wheel_mod_action", lang)))
+        loop_mode = str(loop_mode or "normal").lower()
+        if loop_mode not in _CHOICES[("loop", "mode")]:
+            errors.append(tr("msg_invalid", lang, label=tr("loop_mode", lang)))
         if errors:
             return tr("msg_not_saved", lang, time=time.strftime('%H:%M:%S')) + "\n\n- " + "\n- ".join(errors), gr.update()
         settings["keys"].update(keys, enabled=bool(keys_enabled))
@@ -817,7 +842,7 @@ class VidosserPlugin(WAN2GPPlugin):
                                       flash=bool(flash), sound=bool(sound), sound_volume=sound_volume)
         settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs),
                                    hide_controls=hide_controls, show_thin_progress=bool(thin_progress))
-        settings["loop"].update(loop_all=bool(loop_all))
+        settings["loop"].update(loop_all=bool(loop_all), mode=loop_mode)
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
                                   remember=bool(volume_remember))
         settings["new_video"].update(no_autojump_fullscreen=bool(no_autojump), jump_on_fullscreen_exit=bool(jump_on_exit), notify=bool(new_notify))
