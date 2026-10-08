@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.7] - 2026-10-09
+### Added
+- **Hold Ctrl to drag the volume** (`volume.drag_require_ctrl`, default `false`; tab: *Hold Ctrl to drag the volume* / *Mantener Control pulsado para arrastrar el volumen* in the Volume section). When on, a drag with the volume button changes the volume only if Ctrl is held when the press starts; that drag is then volume only (vertical counts, sideways ignored, never scrubs, the click / context menu that ends it is swallowed). Without Ctrl the button behaves as if the volume drag were off (a normal frame drag if it is the scrub button, a plain button otherwise). With the same button for both, Ctrl + drag changes the volume instead of short jumps. The browser's default for the Ctrl + press (selection etc.) is prevented; Ctrl + wheel is unchanged; the cursor rule is unchanged; touch is not affected. Older `settings.json` files get `false`.
+
 ## [1.4.6] - 2026-10-09
 ### Added
 - **Volume drag button** (`volume.drag_button`: `"left"` | `"right"`, default `"left"`; tab: *Volume drag button* / *Botón para arrastrar el volumen* in the Volume section, *Left* / *Izquierdo*, *Right* / *Derecho*). Older `settings.json` files (no `volume.drag_button`) keep the volume drag on the scrub button (`frame_step.drag_button`), i.e. unchanged behaviour; once saved from the tab the value is explicit.

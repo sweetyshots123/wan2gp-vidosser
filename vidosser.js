@@ -771,6 +771,7 @@
         drag_volume: true,            // click-and-hold + vertical drag on a video = volume (up = louder)
         drag_pixels_per_percent: 2,   // vertical px per 1 % of volume
         drag_invert: false,           // false: drag up = louder
+        // drag_require_ctrl: false (1.4.7): true = hold Ctrl at the press for the volume drag
         // drag_button: "left" | "right" (1.4.6; unset = frame_step.drag_button): same button = axis decides, else volume only
         remember: true,               // keep the last volume for the next videos (also after reload)
     }, SETTINGS.volume || {}));
@@ -1022,6 +1023,9 @@
         // 0..100 and re-anchored at the limits (moving back reacts at once). A volume drag
         // does not pause the video and swallows the click that ends it, like the scrub.
         // Touch: a vertical swipe only while fullscreen (outside it keeps scrolling the page).
+        // Volume key (1.4.7, volume.drag_require_ctrl): when on, the volume
+        // button only drags the volume if Ctrl is held at the press (volume only, like a separate
+        // button); without it the press behaves as if the volume drag were off. Touch is not affected.
         // Volume button (1.4.6, volume.drag_button "left" | "right"): when it is the scrub button,
         // one press does both and the axis decides (above). When they differ, the volume button's
         // drag is volume only (starts after DRAG_THRESHOLD px in any direction, only vertical
@@ -1040,6 +1044,7 @@
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
+        const volModifier = () => (VOL && VOL.config.drag_require_ctrl === true ? "ctrl" : "");   // 1.4.7: Ctrl only for now
         const volButton = () => { const b = VOL && VOL.config.drag_button; return b ? (String(b).toLowerCase() === "right" ? 2 : 0) : dragButton(); };   // unset: the scrub button
         function dragUnit(e) {
             const jm = jumpModifier();
@@ -1057,19 +1062,25 @@
             const button = e.button;
             if (!touch && button !== 0 && button !== 2) return;
             const same = touch || dragButton() === volButton();
-            const scrub = scrubOn && (touch || button === dragButton()), vol = volOn && (touch || button === volButton());
+            // Ctrl for the volume (1.4.7, volume.drag_require_ctrl): when on, the volume button changes the volume
+            // only when that key is held at the press (then volume only); without it, as if the volume drag were off
+            const vm = volModifier(), modVol = !touch && !!vm && !!e[MODIFIERS[vm]];
+            let scrub = scrubOn && (touch || button === dragButton()), vol = volOn && (touch || button === volButton());
+            if (vol && vm && !touch && !modVol) vol = false;
+            if (vol && modVol) scrub = false;
             if (!scrub && !vol) return;
-            const volOnly = vol && !scrub && !same;                          // separate volume button: any direction starts it
+            const volOnly = vol && (modVol || (!scrub && !same));            // volume only: any direction starts it
             const v = e.target;
             if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
             const jm = jumpModifier();
-            if ((e.altKey && jm !== "alt") || (e.metaKey && jm !== "meta") || (e.ctrlKey && jm !== "ctrl")) return;
+            const ok = m => (modVol && vol && vm === m) || jm === m;
+            if ((e.altKey && !ok("alt")) || (e.metaKey && !ok("meta")) || (e.ctrlKey && !ok("ctrl"))) return;
             if (v.controls) {                                            // native control bar / progress bar
                 const r = v.getBoundingClientRect();
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
             drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, lock: null, active: false, done: 0, type: e.pointerType, button,
-                     scrub, vol, volOnly, split: !same && volOn, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
+                     scrub, vol, volOnly, modVol: modVol && vol, split: !same && volOn, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
         }
         // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
         // element, also inside a fullscreen container), on the capturing video and on the
@@ -1232,6 +1243,9 @@
         // backup release under Pointer Lock (pointerup normally ends the drag first)
         window.addEventListener("mouseup", e => { if (drag && drag.type === "mouse" && e.button === drag.button && drag.lock) endDrag("mouseup"); }, true);
         window.addEventListener("click", swallowClick, true);
+        // modifier + press for the volume (1.4.7): no text selection / Shift-click extension / Ctrl-click
+        // behaviour from the browser
+        window.addEventListener("mousedown", e => { if (drag && drag.modVol && !drag.active && e.button === drag.button) e.preventDefault(); }, true);
         window.addEventListener("selectstart", blockWhileDragging, true);
         window.addEventListener("dragstart", blockWhileDragging, true);
         // touch: let vertical panning scroll the page, horizontal moves reach the scrubber;
