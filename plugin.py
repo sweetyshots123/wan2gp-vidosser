@@ -6,6 +6,8 @@ Current tools (modules):
     only while fullscreen), by dragging on the video with the left button (8 px =
     one frame) or with the keyboard (S / A = next / previous frame,
     W / Q = jump forward / back), also in fullscreen.
+  * volume: click-and-hold on the video and drag vertically = volume (up = louder).
+  * new_video: in fullscreen, a newly generated video doesn't replace the one you watch.
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
     loop (frame accurate), U = clear the segment.
   * container_fs: video fullscreen on its container so overlays / messages stay visible.
@@ -36,7 +38,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.3.0"
+PLUGIN_VERSION = "1.4.0"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -93,6 +95,19 @@ DEFAULT_SETTINGS = {
     "loop": {
         "enabled": True,
         "loop_all": True,           # every video plays in loop
+    },
+    "volume": {
+        "enabled": True,
+        "drag_volume": True,        # click-and-hold on a video + vertical drag = volume (up = louder)
+        "drag_pixels_per_percent": 2.0,  # vertical px per 1 % of volume (0.2..50)
+        "drag_invert": False,       # False: drag up = louder
+        "remember": True,           # keep the last volume for the next videos (also after a page reload)
+    },
+    "new_video": {
+        "enabled": True,
+        "no_autojump_fullscreen": True,   # while a video is fullscreen, a newly generated video doesn't replace it
+        "jump_on_fullscreen_exit": True,  # on leaving fullscreen, show the newest video (what WanGP would have done)
+        "notify": True,                   # "Nuevo vídeo listo" message in fullscreen
     },
     "save_frame": {
         "enabled": True,
@@ -170,6 +185,7 @@ def load_settings(path=None):
     settings["save_frame"]["sound_volume"] = max(1, min(100, settings["save_frame"]["sound_volume"]))
     settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
     settings["frame_step"]["drag_pixels_per_frame"] = max(1, min(200, settings["frame_step"]["drag_pixels_per_frame"]))
+    settings["volume"]["drag_pixels_per_percent"] = max(0.2, min(50.0, settings["volume"]["drag_pixels_per_percent"]))
     _resolve_new_key_conflicts(settings["keys"], {a for a, _l in KEY_ACTIONS if a in user_keys})
     return settings
 
@@ -258,7 +274,8 @@ class VidosserPlugin(WAN2GPPlugin):
         super().__init__()
         self.name = "Vidosser"
         self.version = PLUGIN_VERSION
-        self.description = "Collection of video viewing tools: frame stepping (wheel, S/A, W/Q) and save displayed frame (D), also in fullscreen."
+        self.description = ("Collection of video viewing tools: frame stepping (wheel, S/A, W/Q, drag), volume by vertical drag, "
+                            "save displayed frame (D), loops, and no jump to a new video while fullscreen.")
         self.server_config = None
 
     def setup_ui(self):
@@ -340,6 +357,19 @@ class VidosserPlugin(WAN2GPPlugin):
                                                elem_id="vidosser_drag_hide_cursor",
                                                info="Se usa cuando el bloqueo del puntero está desactivado o el navegador lo rechaza.")
         with gr.Group():
+            gr.Markdown("### Volumen\nHaz clic sobre el vídeo, mantén pulsado y arrastra **en vertical**: hacia arriba sube el volumen, hacia abajo lo baja. "
+                        "Arrastrar en horizontal sigue pasando fotogramas: la dirección se decide en los primeros 4 px (la que más se mueva) y se mantiene "
+                        "hasta que sueltas. Usa el mismo botón, el bloqueo del puntero y el cursor oculto que el arrastre de fotogramas.")
+            with gr.Row():
+                drag_volume = gr.Checkbox(label="Arrastrar en vertical = volumen", value=current("volume", "drag_volume"), elem_id="vidosser_drag_volume",
+                                          info="Un clic o un doble clic sin arrastrar hacen lo de siempre. Si el vídeo está silenciado, al subir se activa el sonido. "
+                                               "En pantallas táctiles, el deslizamiento vertical solo cambia el volumen a pantalla completa.")
+                volume_ppp = gr.Number(label="Píxeles por 1 % de volumen", value=current("volume", "drag_pixels_per_percent"), minimum=0.2, maximum=50, step=0.5,
+                                       elem_id="vidosser_volume_pixels_per_percent", info="2 = 200 px de arrastre para pasar de 0 % a 100 %.")
+                volume_invert = gr.Checkbox(label="Invertir sentido del volumen (abajo = más alto)", value=current("volume", "drag_invert"), elem_id="vidosser_volume_invert")
+                volume_remember = gr.Checkbox(label="Recordar el volumen para los siguientes vídeos", value=current("volume", "remember"), elem_id="vidosser_volume_remember",
+                                              info="También tras recargar la página (se guarda en este navegador).")
+        with gr.Group():
             gr.Markdown("### Salto corto\nCuánto salta cada pulsación de **W / Q** y cada muesca de la rueda con el modificador elegido.")
             with gr.Row():
                 jump_mode = gr.Radio(label="Salto corto: medida", choices=[("En segundos", "seconds"), ("En fotogramas", "frames")], value=current("frame_step", "jump_mode"), elem_id="vidosser_jump_mode")
@@ -353,6 +383,19 @@ class VidosserPlugin(WAN2GPPlugin):
                         "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
                         "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. Las teclas se cambian arriba, en «Teclas».")
             loop_all = gr.Checkbox(label="Repetir todos los vídeos en bucle", value=current("loop", "loop_all"), elem_id="vidosser_loop_all")
+        with gr.Group():
+            gr.Markdown("### Vídeo nuevo\nCuando WanGP termina un vídeo, normalmente la galería salta a ese vídeo nuevo. "
+                        "Fuera de la pantalla completa sigue haciéndolo como siempre.")
+            with gr.Row():
+                no_autojump = gr.Checkbox(label="A pantalla completa, no saltar al vídeo nuevo", value=current("new_video", "no_autojump_fullscreen"),
+                                          elem_id="vidosser_no_autojump_fullscreen",
+                                          info="Mientras ves un vídeo de la galería a pantalla completa, sigue en ese vídeo (misma posición, pausa o reproducción, "
+                                               "sin salir de la pantalla completa). El vídeo nuevo se añade a la galería igualmente.")
+                jump_on_exit = gr.Checkbox(label="Al salir de la pantalla completa, mostrar el vídeo nuevo", value=current("new_video", "jump_on_fullscreen_exit"),
+                                           elem_id="vidosser_jump_on_fullscreen_exit",
+                                           info="Lo que WanGP habría hecho; así, fuera de la pantalla completa, la galería sigue saltando a los vídeos nuevos.")
+                new_notify = gr.Checkbox(label="Aviso «Nuevo vídeo listo»", value=current("new_video", "notify"), elem_id="vidosser_new_video_notify",
+                                         info="No se puede mostrar en la pantalla completa nativa del vídeo.")
         with gr.Group():
             gr.Markdown("### Guardar fotograma")
             with gr.Row():
@@ -401,7 +444,8 @@ class VidosserPlugin(WAN2GPPlugin):
 
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
-                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress]
+                              toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify]
         save_btn.click(fn=self._save_from_ui, inputs=inputs, outputs=[status, settings_json], show_progress="hidden").then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
         check_btn.click(fn=self._check_folder_ui, inputs=[folder], outputs=[folder_status], show_progress="hidden")
@@ -414,7 +458,8 @@ class VidosserPlugin(WAN2GPPlugin):
 
     _UI_FIELDS = ("keys_enabled", "wheel_enabled", "invert", "shift_frames", "jump_mode", "jump_seconds", "jump_frames",
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
-                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress")
+                  "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
+                  "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, then the fields of _UI_FIELDS (same order as `inputs`)."""
@@ -428,7 +473,9 @@ class VidosserPlugin(WAN2GPPlugin):
                          toast=True, toast_s=2.5, flash=True, sound=True, sound_volume=60, container_fs=True, loop_all=True,
                          drag_scrub=True, drag_ppf=8, drag_invert=False, drag_button="left",
                          drag_hide_cursor=True, drag_pointer_lock=True,
-                         hide_controls="fullscreen", thin_progress=True):
+                         hide_controls="fullscreen", thin_progress=True,
+                         drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
+                         no_autojump=True, jump_on_exit=True, new_notify=True):
         settings = load_settings()
         keys, errors = validate_keys(key_values)
         def number(value, label, minimum, maximum, integer):
@@ -448,6 +495,7 @@ class VidosserPlugin(WAN2GPPlugin):
         toast_s = number(toast_s, "Duración del mensaje (segundos)", 0.5, 30, False)
         sound_volume = number(sound_volume, "Volumen", 1, 100, True)
         drag_ppf = number(drag_ppf, "Píxeles por fotograma al arrastrar", 1, 200, True)
+        volume_ppp = number(volume_ppp, "Píxeles por 1 % de volumen", 0.2, 50, False)
         folder = str(folder or "").strip().strip('"')
         if sf_mode == "direct" or folder:
             ok, path, message = self.check_folder(folder, create=sf_mode == "direct")
@@ -482,6 +530,9 @@ class VidosserPlugin(WAN2GPPlugin):
         settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs),
                                    hide_controls=hide_controls, show_thin_progress=bool(thin_progress))
         settings["loop"].update(loop_all=bool(loop_all))
+        settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
+                                  remember=bool(volume_remember))
+        settings["new_video"].update(no_autojump_fullscreen=bool(no_autojump), jump_on_fullscreen_exit=bool(jump_on_exit), notify=bool(new_notify))
         try:
             save_settings(settings)
         except Exception as e:

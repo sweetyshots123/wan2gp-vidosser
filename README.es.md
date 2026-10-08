@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.3.0
+*[English](README.md)* · Licencia MIT · versión 1.4.0
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -18,7 +18,8 @@ Arrastrando sobre el vídeo:
 - Empieza solo tras 4 píxeles de movimiento sobre todo horizontal, así que **un clic normal sigue pausando / reproduciendo**. Si el vídeo se está reproduciendo, se pausa al empezar a arrastrar, y el clic del final del arrastre no lo vuelve a poner en marcha. Con el **botón derecho**, un clic derecho normal sigue abriendo el menú contextual; el menú solo se bloquea si de verdad has arrastrado.
 - Mientras arrastras, el ratón queda **bloqueado y oculto** (Pointer Lock, «Bloquear el puntero al arrastrar», activado por defecto): el puntero no choca con el borde de la pantalla, así que puedes seguir avanzando en un solo movimiento largo, y al soltar reaparece donde estaba. Chrome/Edge muestran cada vez arriba su aviso «Pulsa Esc para mostrar el cursor»: es un aviso de seguridad del navegador y desaparece solo. El bloqueo se suelta siempre al soltar el botón, al pulsar **Esc** o al cambiar de ventana. Si el bloqueo está desactivado o el navegador lo rechaza, el arrastre sigue funcionando aunque el ratón salga del vídeo y el cursor solo se oculta mientras arrastras («Ocultar el cursor mientras arrastras», activado por defecto); vuelve siempre al soltar, con Esc, si se cancela o si la ventana pierde el foco.
 - **Shift + arrastrar** = 10 fotogramas por paso; **Ctrl + arrastrar** (el modificador del salto corto) = un salto corto por paso.
-- Funciona dentro y fuera de la pantalla completa (no depende de «Rueda solo a pantalla completa») y con el dedo en pantallas táctiles (deslizar en horizontal; en vertical sigue desplazando la página).
+- Funciona dentro y fuera de la pantalla completa (no depende de «Rueda solo a pantalla completa») y con el dedo en pantallas táctiles (deslizar en horizontal; en vertical sigue desplazando la página, salvo a pantalla completa, donde cambia el volumen).
+- **Arrastrar en vertical = volumen** (ver [Volumen](#volumen-volume)): la dirección se decide en los primeros 4 px según hacia dónde te muevas más (horizontal = fotogramas, vertical = volumen; si empatan, horizontal) y se mantiene hasta que sueltas el botón, así que un arrastre de fotogramas no cambia el volumen aunque se tuerza, y al revés.
 - No actúa sobre la barra de controles nativa del vídeo (los 40 px de abajo de un vídeo mientras se ven sus controles; si Vidosser oculta los controles, se puede arrastrar sobre toda la imagen), las miniaturas de la galería, los cuadros de texto ni nada que no sea la imagen del vídeo.
 
 Con el teclado (teclas configurables en la pestaña **Vidosser**):
@@ -33,6 +34,24 @@ En general:
 - Muestra un pequeño indicador «Frame N / último · fps» (y el tamaño del salto con Q/W) que desaparece solo.
 - Los fps se leen del propio archivo (MP4/MOV/MKV/WebM), así que el paso es exacto para Wan (16 fps), LTX (24/25 fps), vídeos interpolados (32 fps), etc.
 - El fotograma que ves es el mismo que usa WanGP cuando guardas o reutilizas el fotograma actual del vídeo de la galería.
+
+## Volumen (`volume`)
+
+- **Haz clic sobre el vídeo, mantén pulsado y arrastra en vertical**: **hacia arriba sube el volumen, hacia abajo lo baja**. Por defecto, 2 píxeles = 1 % (200 px para ir de 0 % a 100 %), configurable; se puede invertir el sentido.
+- Un indicador muestra el volumen mientras arrastras: «Volumen ██████░░░░  60 %» («0 % (silencio)» abajo del todo).
+- Va de 0 % a 100 %. Si te pasas de un extremo y vuelves, el volumen cambia en cuanto das la vuelta (no hay que deshacer lo que te pasaste).
+- Si el vídeo está **silenciado**, al subir se quita el silencio y empieza desde 0 %.
+- No pausa el vídeo (el arrastre de fotogramas sí). Usa el mismo botón que el arrastre de fotogramas («Botón para arrastrar»), el mismo **bloqueo del puntero y cursor oculto**, y el clic del final del arrastre no pausa ni reproduce. Un clic normal y el **doble clic** (pantalla completa) siguen igual que antes.
+- Funciona dentro y fuera de la pantalla completa (la de Vidosser y la nativa del vídeo; en la nativa no se ve el indicador). En pantallas táctiles, deslizar en vertical cambia el volumen **solo a pantalla completa**; fuera de ella sigue desplazando la página.
+- **Recordar el volumen** (activado por defecto): el último volumen que pones (arrastrando o con la barra del vídeo) se usa en los vídeos que se cargan después, también al recargar la página (se guarda en este navegador). Nunca se recuerda el silencio.
+
+## Vídeo nuevo a pantalla completa (`new_video`)
+
+Cuando WanGP termina un vídeo, la galería salta a ese vídeo nuevo (si estabas en el último). **Mientras ves un vídeo de la galería a pantalla completa** (la de Vidosser, la de la galería o la nativa del vídeo), con «A pantalla completa, no saltar al vídeo nuevo» (activado por defecto) **sigues viendo el mismo vídeo**: misma posición, sigue en pausa o reproduciéndose, sin salir de la pantalla completa y sin recargarse (ni un parpadeo). El vídeo nuevo se añade a la galería igualmente y sale el aviso «Nuevo vídeo listo (sigues viendo este)» (o «2 vídeos nuevos listos…»); el aviso no se puede mostrar en la pantalla completa nativa del vídeo.
+
+- **Fuera de la pantalla completa no cambia nada**: WanGP salta al vídeo nuevo como siempre.
+- **Al salir de la pantalla completa** se muestra el vídeo más nuevo, que es lo que WanGP habría hecho («Al salir de la pantalla completa, mostrar el vídeo nuevo», activado por defecto); así la galería sigue saltando a los vídeos nuevos fuera de la pantalla completa. Si lo desactivas, al salir sigues en el vídeo que estabas viendo (y, como en WanGP cuando no estás en el último vídeo, la galería ya no salta sola hasta que vuelvas a elegir el último).
+- Tú puedes seguir cambiando de vídeo a pantalla completa (miniaturas, flechas): eso no se bloquea. Si el vídeo que ves desaparece de la galería (borrado), se aplica el cambio.
 
 ## Guardar fotograma (`save_frame`)
 
@@ -72,7 +91,9 @@ Todas las opciones se cambian desde la pestaña **Vidosser** de WanGP:
 - **Teclas**: haz clic en un cuadro y pulsa la tecla que quieras (Retroceso borra). Incluye las del bucle (L, I, O, U). No se permiten teclas repetidas entre ninguna de las acciones. Si tu `settings.json` ya usaba L, I, O o U para otra acción, se respeta tu tecla y la acción nueva recibe otra libre.
 - **Paso de fotogramas**: rueda activada, rueda solo a pantalla completa, invertir sentido, fotogramas con Shift, arrastrar para pasar fotogramas, botón para arrastrar (izquierdo o derecho), píxeles por fotograma al arrastrar, invertir sentido al arrastrar, bloquear el puntero al arrastrar y ocultar el cursor mientras arrastras.
 - **Salto corto**: medida (segundos o fotogramas), segundos, fotogramas y el **modificador + rueda** (Ctrl por defecto; Alt, Shift, Meta o ninguno). Si eliges Shift, Shift + rueda hace el salto corto en lugar del multiplicador de Shift, y la pestaña lo avisa al guardar.
+- **Volumen**: arrastrar en vertical = volumen, píxeles por 1 % de volumen, invertir sentido y recordar el volumen.
 - **Bucle**: repetir todos los vídeos en bucle.
+- **Vídeo nuevo**: a pantalla completa, no saltar al vídeo nuevo; al salir de la pantalla completa, mostrar el vídeo nuevo; aviso «Nuevo vídeo listo».
 - **Guardar fotograma**: formato, calidad JPG, modo, carpeta y clic central para guardar. El botón **Comprobar carpeta** dice si existe, si se puede crear y si se puede escribir en ella. **Aviso al guardar**: mensaje sí/no, duración del mensaje, destello, sonido sí/no y volumen.
 - **Indicador y pantalla completa**: mostrar el indicador, pantalla completa con indicadores y mensajes, ocultar la barra de controles del vídeo, barra de progreso fina y los fps que se usan si no se pueden detectar.
 
@@ -92,7 +113,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.3.0.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.0.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -165,6 +186,25 @@ Sección `loop`:
 | `enabled` | true | activar/desactivar esta herramienta |
 | `loop_all` | true | todos los vídeos en bucle |
 
+Sección `volume`:
+
+| opción | por defecto | significado |
+|---|---|---|
+| `enabled` | true | activar/desactivar esta herramienta |
+| `drag_volume` | true | clic mantenido + arrastrar en vertical sobre el vídeo = volumen (arriba = más alto) |
+| `drag_pixels_per_percent` | 2 | píxeles de arrastre vertical por cada 1 % de volumen (0,2-50) |
+| `drag_invert` | false | `true` = arrastrar hacia abajo sube el volumen |
+| `remember` | true | usar el último volumen en los vídeos siguientes (también tras recargar la página) |
+
+Sección `new_video`:
+
+| opción | por defecto | significado |
+|---|---|---|
+| `enabled` | true | activar/desactivar esta herramienta |
+| `no_autojump_fullscreen` | true | a pantalla completa, un vídeo recién generado no sustituye al que estás viendo |
+| `jump_on_fullscreen_exit` | true | al salir de la pantalla completa, mostrar el vídeo más nuevo (lo que WanGP habría hecho) |
+| `notify` | true | aviso «Nuevo vídeo listo» a pantalla completa |
+
 Sección `save_frame`:
 
 | opción | por defecto | significado |
@@ -197,3 +237,5 @@ Sección `save_frame`:
 - JPG comprime con pérdida; para un fotograma idéntico al original usa PNG.
 - En macOS la aceleración de la rueda del sistema puede hacer que un giro rápido cuente más muescas.
 - Las teclas se comparan por el carácter que producen (`a`, `s`...), no por su posición en el teclado.
+- Volumen: el indicador no se ve en la pantalla completa nativa del vídeo (el volumen sí cambia). «Recordar el volumen» se guarda en el navegador, no en `settings.json`.
+- Vídeo nuevo a pantalla completa: funciona con la galería de vídeos generados de WanGP (vídeo nuevo sustituyendo a un vídeo). Si lo nuevo es una **imagen**, la galería cambia el reproductor por una imagen y eso no se puede evitar. Si el vídeo que ves sale de la lista visible de la galería (por ejemplo, con el límite de archivos de la galería de WanGP), se aplica el cambio.

@@ -15,8 +15,13 @@
 //                       * wheel_jump_modifier (Ctrl) + wheel = one short jump per notch
 //                       * next_frame / prev_frame (S / A), jump_forward / jump_back
 //                         (W / Q: jump_seconds converted with the video fps, or jump_frames)
+//                       * drag on the video: horizontal = scrub frames, vertical = volume
+//                         (axis chosen by the dominant direction after DRAG_THRESHOLD px, then locked)
+//   MODULE volume       volume helpers for the vertical drag (overlay, clamp, unmute, remember)
 //   MODULE container_fs video fullscreen on a container (not native) so overlays/toasts show
 //   MODULE loop         loop all videos, loop toggle (L), A-B segment loop (I / O, U = clear)
+//   MODULE new_video    in fullscreen, a newly generated video does not replace the one being
+//                       watched in the output gallery (no_autojump_fullscreen)
 //   MODULE save_frame   save_frame_as (D, or middle click on the video): saves the displayed frame (PNG/JPG), extracted
 //                       server-side from the source video (lossless, exact frame),
 //                       either with a "save as" dialog or straight into a folder.
@@ -642,6 +647,61 @@
     V.config = { general: core.CFG, keys: core.KEYS };
 
     // =======================================================================
+    // MODULE volume - volume by vertical drag (the drag itself lives in frame_step)
+    // =======================================================================
+    // set(v, percent): clamp 0..100, unmute when raising from muted, overlay "Volumen".
+    // remember: the last volume (drag or the native slider) is applied to videos loaded
+    // later, also after a page reload (localStorage). Only the level, never "muted".
+    V.modules.volume = (function (core, CFG) {
+        const STORE = "vidosser.volume";
+        let remembered = null, applying = false;
+        try { const r = Number(localStorage.getItem(STORE)); if (localStorage.getItem(STORE) !== null && r >= 0 && r <= 1) remembered = r; } catch (_) { /* no storage */ }
+        const clamp = p => Math.max(0, Math.min(100, Number(p) || 0));
+        const level = v => (v.muted ? 0 : v.volume * 100);
+        const isThumb = v => !!v.closest(".thumbnail-item");
+        const dragOn = () => CFG.enabled !== false && CFG.drag_volume !== false;
+        function remember(vol) {
+            if (CFG.remember === false) return;
+            remembered = vol;
+            try { localStorage.setItem(STORE, String(vol)); } catch (_) { /* ignore */ }
+        }
+        function label(p) {
+            const r = Math.round(clamp(p)), n = Math.round(r / 10);
+            return `Volumen ${"█".repeat(n)}${"░".repeat(10 - n)} ${String(r).padStart(3)} %` + (r === 0 ? " (silencio)" : "");
+        }
+        function set(v, p, overlay = true) {
+            p = Math.round(clamp(p));                                // whole percents (the drag keeps its own fraction)
+            applying = true;
+            try {
+                if (p > 0 && v.muted) v.muted = false;               // raising from muted: unmute
+                v.volume = p / 100;
+            } finally { applying = false; }
+            remember(p / 100);
+            if (overlay) core.showOverlay(v, label(p));
+            return p;
+        }
+        function applyRemembered(v) {
+            if (!(v instanceof HTMLVideoElement) || isThumb(v) || CFG.enabled === false || CFG.remember === false || remembered === null) return;
+            if (Math.abs(v.volume - remembered) < 1e-4) return;
+            applying = true;
+            try { v.volume = remembered; } finally { applying = false; }
+        }
+        document.addEventListener("loadedmetadata", e => applyRemembered(e.target), true);
+        document.addEventListener("volumechange", e => {            // native volume slider: remember it too
+            const v = e.target;
+            if (applying || !(v instanceof HTMLVideoElement) || isThumb(v) || v.muted || !core.eligible(v, core.fsElement())) return;
+            remember(v.volume);
+        }, true);
+        return { config: CFG, set, level, label, dragOn, remembered: () => remembered };
+    })(core, V.config.volume = Object.assign({
+        enabled: true,
+        drag_volume: true,            // click-and-hold + vertical drag on a video = volume (up = louder)
+        drag_pixels_per_percent: 2,   // vertical px per 1 % of volume
+        drag_invert: false,           // false: drag up = louder
+        remember: true,               // keep the last volume for the next videos (also after reload)
+    }, SETTINGS.volume || {}));
+
+    // =======================================================================
     // MODULE frame_step - wheel + keyboard frame stepping
     // =======================================================================
     V.modules.frame_step = (function (core, CFG) {
@@ -829,6 +889,15 @@
         // jump modifier = one short jump per step. Not used on the native control bar
         // (bottom CONTROLS_PX of a <video controls>), thumbnails or anything that is not
         // the video itself. Independent of wheel_fullscreen_only.
+        // Vertical drag = volume (volume.drag_volume): the axis is chosen once, when the
+        // pointer has moved DRAG_THRESHOLD px, by the dominant direction (|dy| > |dx| =
+        // vertical, ties = horizontal), and stays locked until the button is released. Up =
+        // louder (volume.drag_invert), volume.drag_pixels_per_percent px per 1 %, clamped
+        // 0..100 and re-anchored at the limits (moving back reacts at once). A volume drag
+        // does not pause the video; it uses the same pointer lock / hidden cursor / click
+        // swallowing as the scrub. Touch: a vertical swipe only while fullscreen (outside
+        // fullscreen it keeps scrolling the page).
+        const VOL = V.modules.volume;
         const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
@@ -841,7 +910,8 @@
         function onDragDown(e) {
             if (drag) endDrag("stale", false);                          // a release we never saw: start clean
             swallowClickUntil = 0; swallowMenuUntil = 0;                // a new press: an expected click/menu never came (pointer lock)
-            if (CFG.enabled === false || CFG.drag_scrub === false) return;
+            const scrub = CFG.enabled !== false && CFG.drag_scrub !== false, vol = !!(VOL && VOL.dragOn());
+            if (!scrub && !vol) return;
             if (!e.isPrimary || (e.pointerType === "pen" && e.pressure === 0)) return;
             const button = e.pointerType === "touch" ? 0 : dragButton();     // a finger always scrubs
             if (e.button !== button) return;
@@ -853,7 +923,8 @@
                 const r = v.getBoundingClientRect();
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
-            drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, lock: null, active: false, done: 0, type: e.pointerType, button };
+            drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, lock: null, active: false, done: 0, type: e.pointerType, button,
+                     scrub, vol, axis: null, prevDy: 0, level: 0 };
         }
         // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
         // element, also inside a fullscreen container), on the capturing video and on the
@@ -881,7 +952,8 @@
         // the lock is refused, the drag continues with pointer capture + hidden cursor.
         function startLock(d) {
             d.lock = "pending";
-            d.lockBase = d.dx; d.mv = 0;          // Chrome freezes clientX as soon as the lock is requested: count movementX from here
+            d.lockBase = d.dx; d.mv = 0;          // Chrome freezes clientX/Y as soon as the lock is requested: count movementX/Y from here
+            d.lockBaseY = d.dy; d.mvY = 0;
             const fail = () => { if (drag === d && d.lock === "pending") { d.lock = "failed"; capture(d); } };
             try {
                 const r = d.v.requestPointerLock();
@@ -902,19 +974,35 @@
         function onDragMove(e) {
             if (!drag || e.pointerId !== drag.id) return;
             if (drag.active && e.buttons === 0 && e.pointerType === "mouse") { endDrag("no button"); return; }   // release was missed
-            if (drag.lock === "on" || drag.lock === "pending") { drag.mv += e.movementX || 0; drag.dx = drag.lockBase + drag.mv; }
-            else drag.dx = e.clientX - drag.x0;
-            const dx = drag.dx, dy = e.clientY - drag.y0;
+            if (drag.lock === "on" || drag.lock === "pending") {
+                drag.mv += e.movementX || 0; drag.dx = drag.lockBase + drag.mv;
+                drag.mvY += e.movementY || 0; drag.dy = drag.lockBaseY + drag.mvY;
+            } else { drag.dx = e.clientX - drag.x0; drag.dy = e.clientY - drag.y0; }
+            const dx = drag.dx, dy = drag.dy;
             if (!drag.active) {
-                if (Math.abs(dy) >= DRAG_THRESHOLD && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }  // vertical: not ours
-                if (Math.abs(dx) < DRAG_THRESHOLD) return;
+                const adx = Math.abs(dx), ady = Math.abs(dy);
+                if (Math.max(adx, ady) < DRAG_THRESHOLD) return;          // not decided yet: still a click
+                const axis = ady > adx ? "y" : "x";                         // dominant direction, locked from now on
+                const fsTouch = e.pointerType !== "touch" || !!core.fsElement();   // touch outside fullscreen: vertical = page scroll
+                if (axis === "y" ? !(drag.vol && fsTouch) : !drag.scrub) { drag = null; return; }   // not ours
+                drag.axis = axis;
                 drag.active = true;
                 if (CFG.drag_pointer_lock !== false && e.pointerType === "mouse" && drag.v.requestPointerLock) startLock(drag);
                 else capture(drag);
                 if (CFG.drag_hide_cursor !== false) hideCursor(drag.v);
-                if (!drag.v.paused) drag.v.pause();
+                if (axis === "x") { if (!drag.v.paused) drag.v.pause(); }
+                else drag.level = VOL.level(drag.v);                      // muted counts as 0 %: raising starts from silence
             }
             e.preventDefault();
+            if (drag.axis === "y") {
+                const ppp = Math.max(0.1, Number(VOL.config.drag_pixels_per_percent) || 2);
+                const step = (dy - drag.prevDy) / ppp;
+                drag.prevDy = dy;
+                if (!step) return;
+                drag.level = Math.max(0, Math.min(100, drag.level + (VOL.config.drag_invert ? step : -step)));   // screen y grows downwards
+                VOL.set(drag.v, drag.level);
+                return;
+            }
             const ppf = Math.max(1, Number(CFG.drag_pixels_per_frame) || 8);
             let want = Math.trunc((CFG.drag_invert ? -dx : dx) / ppf);
             const n = want - drag.done;
@@ -979,13 +1067,15 @@
         window.addEventListener("click", swallowClick, true);
         window.addEventListener("selectstart", blockWhileDragging, true);
         window.addEventListener("dragstart", blockWhileDragging, true);
-        // touch: let vertical panning scroll the page, horizontal moves reach the scrubber
+        // touch: let vertical panning scroll the page, horizontal moves reach the scrubber;
+        // while fullscreen (nothing to scroll) vertical moves reach the volume drag too
         const touchCss = document.createElement("style");
-        touchCss.textContent = "video.vidosser-drag-scrub{touch-action:pan-y pinch-zoom}";
+        touchCss.textContent = "video.vidosser-drag-scrub{touch-action:pan-y pinch-zoom}" +
+            ":fullscreen video.vidosser-drag-volume,video.vidosser-drag-volume:fullscreen{touch-action:pinch-zoom}";
         document.head.appendChild(touchCss);
         function markVideos() {
-            const on = CFG.enabled !== false && CFG.drag_scrub !== false;
-            document.querySelectorAll("video").forEach(v => v.classList.toggle("vidosser-drag-scrub", on));
+            const on = CFG.enabled !== false && CFG.drag_scrub !== false, vol = !!(VOL && VOL.dragOn());
+            document.querySelectorAll("video").forEach(v => { v.classList.toggle("vidosser-drag-scrub", on); v.classList.toggle("vidosser-drag-volume", vol); });
         }
         let markQueued = false;
         new MutationObserver(() => {
@@ -1001,6 +1091,8 @@
             dragging: () => !!(drag && drag.active),
             cursorHidden: () => hiddenOn.length > 0 || document.documentElement.classList.contains("vidosser-scrubbing"),
             dragLock: () => drag ? drag.lock : null,
+            dragAxis: () => (drag && drag.active ? drag.axis : null),
+            clearSwallow: () => { swallowClickUntil = 0; swallowClickOn = null; },
             info: v => { const i = core.getInfo(v), s = stepState(v); return { fps: i.fps, source: i.fpsSource, frames: i.frames, target: s.target }; },
             step: (v, n) => queueSteps(v, n | 0, 0),
             jump: (v, n) => queueSteps(v, 0, n | 0),
@@ -1599,6 +1691,123 @@
         enabled: true,
         loop_all: true,           // every <video> plays in loop
     }, SETTINGS.loop || {}));
+
+    // =======================================================================
+    // MODULE new_video - in fullscreen, keep watching the current video when WanGP adds a
+    // newly generated one to the output gallery (new_video.no_autojump_fullscreen)
+    // =======================================================================
+    // When a generation ends, WanGP (refresh_gallery / finalize_generation) sends the gallery
+    // a new value with selected_index = the new last item if the selected item was the last
+    // one. Gradio's Gallery keeps the same preview <video> element and only sets its "src"
+    // attribute (Svelte: if (!src_url_equal(video.src, url)) video.setAttribute("src", url)).
+    // While that video is fullscreen (Vidosser's container fullscreen, Gradio's gallery
+    // fullscreen or the native <video> fullscreen), this module refuses that src change, so
+    // the picture, position, play state, fullscreen, volume and A-B loop stay exactly as they
+    // were (no reload at all). Right after Gradio's update it clicks the thumbnail of the
+    // video still on screen, so Gradio and WanGP select it again (Gradio then finds the same
+    // src and does not touch the element; WanGP's select_media stores the choice, so later
+    // refreshes keep it too). The new video is in the gallery as usual.
+    // Allowed as usual: changes the user makes (trusted click on a thumbnail, arrow keys in
+    // the gallery), anything outside fullscreen, a gallery with nothing loaded yet, and a
+    // switch away from a video that is no longer in the gallery (deleted / out of the list).
+    // On leaving fullscreen (jump_on_fullscreen_exit) the newest video is selected, which is
+    // what WanGP would have shown, so outside fullscreen WanGP keeps following new videos.
+    V.modules.new_video = (function (core, CFG) {
+        const mediaSrc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
+        const nativeSetAttribute = Element.prototype.setAttribute;
+        let userNavUntil = 0, blocked = null;                          // blocked = { v, src: watched, news: Set of refused srcs }
+        const abs = u => { try { return new URL(String(u), document.baseURI).href; } catch (_) { return String(u || ""); } };
+        const isPreview = v => v instanceof HTMLVideoElement && !v.closest(".thumbnail-item") && !!v.closest(".gallery-container .preview");
+        const inFs = v => { const fs = core.fsElement(); return !!(fs && (fs === v || fs.contains(v))); };
+        const active = () => CFG.enabled !== false && CFG.no_autojump_fullscreen !== false;
+        const thumbs = v => { const g = v.closest(".gallery-container"); return g ? [...g.querySelectorAll(".preview .thumbnails .thumbnail-item")] : []; };
+        function thumbFor(v, src) {
+            for (const t of thumbs(v)) {
+                const tv = t.querySelector("video"), img = t.querySelector("img");
+                const u = tv ? (tv.getAttribute("src") || tv.src) : img ? (img.getAttribute("src") || img.src) : "";
+                if (u && abs(u) === src) return t;
+            }
+            return null;
+        }
+        // No "our own navigation" grace period here: WanGP sends the same gallery update twice in
+        // quick succession (refresh_gallery, then the end of the generation), both must be refused.
+        function select(thumb) {
+            const fsm = V.modules.frame_step;
+            if (fsm && fsm.clearSwallow) fsm.clearSwallow();            // a click swallowed after a scrub must not be this one
+            thumb.click();
+        }
+        function notify(n) {
+            if (CFG.notify === false) return;
+            const text = n > 1 ? `${n} vídeos nuevos listos (sigues viendo este)` : "Nuevo vídeo listo (sigues viendo este)";
+            core.toast(text, "info", 2200);
+        }
+        // true = let Gradio set the new src now
+        function allowSrc(v, value) {
+            if (!active() || !isPreview(v) || !inFs(v)) return true;
+            const now = performance.now();
+            if (now < userNavUntil) return true;                          // the user's own navigation
+            const cur = v.currentSrc || v.src;
+            if (!cur || v.readyState < 1 || value == null || value === "" || abs(value) === abs(cur)) return true;
+            // Refuse for now; once Gradio's update is complete (the thumbnails show the new
+            // list), select the video still on screen again, or apply the change if it is gone.
+            const keep = abs(cur), next = String(value);
+            queueMicrotask(() => setTimeout(() => {
+                const t = v.isConnected && thumbFor(v, keep);
+                if (t) {
+                    if (!blocked || blocked.v !== v || blocked.src !== keep) blocked = { v, src: keep, news: new Set() };
+                    const fresh = !blocked.news.has(abs(next));
+                    blocked.news.add(abs(next));
+                    select(t);
+                    if (fresh) notify(blocked.news.size);                // WanGP may resend the same update: count each new video once
+                } else if (v.isConnected && abs(v.currentSrc || v.src) === keep) {
+                    nativeSetAttribute.call(v, "src", next);              // the watched video left the gallery
+                }
+            }, 0));
+            return false;
+        }
+        Object.defineProperty(HTMLVideoElement.prototype, "setAttribute", {
+            configurable: true, writable: true,
+            value: function (name, value) {
+                if (String(name).toLowerCase() === "src" && !allowSrc(this, value)) return;
+                return nativeSetAttribute.call(this, name, value);
+            },
+        });
+        if (mediaSrc && mediaSrc.set) {
+            Object.defineProperty(HTMLVideoElement.prototype, "src", {
+                configurable: true, enumerable: mediaSrc.enumerable,
+                get() { return mediaSrc.get.call(this); },
+                set(value) { if (allowSrc(this, value)) mediaSrc.set.call(this, value); },
+            });
+        }
+        // The user's own gallery navigation is always allowed (capture phase: before Gradio).
+        window.addEventListener("click", e => {
+            if (e.isTrusted && e.target instanceof Element && e.target.closest(".gallery-container .thumbnail-item")) {
+                userNavUntil = performance.now() + 1500; blocked = null;
+            }
+        }, true);
+        window.addEventListener("keydown", e => {
+            if (!e.isTrusted || !["ArrowLeft", "ArrowRight", "Escape"].includes(e.key)) return;
+            const t = e.composedPath ? e.composedPath()[0] : e.target;
+            if (t instanceof Element && t.closest(".gallery-container") && !core.typingOrModal(e)) {
+                userNavUntil = performance.now() + 1500; blocked = null;
+            }
+        }, true);
+        function onFullscreenChange() {
+            if (core.fsElement() || !blocked) return;
+            const b = blocked; blocked = null;
+            if (CFG.jump_on_fullscreen_exit === false || !b.v.isConnected || abs(b.v.currentSrc || b.v.src) !== b.src) return;
+            const all = thumbs(b.v), last = all[all.length - 1];
+            if (last && !last.classList.contains("selected")) setTimeout(() => select(last), 0);
+        }
+        document.addEventListener("fullscreenchange", onFullscreenChange);
+        document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+        return { config: CFG, pending: () => (blocked ? { src: blocked.src, count: blocked.news.size } : null) };
+    })(core, V.config.new_video = Object.assign({
+        enabled: true,
+        no_autojump_fullscreen: true,   // in fullscreen, a new video does not replace the one being watched
+        jump_on_fullscreen_exit: true,  // on leaving fullscreen, show the newest video (what WanGP would have done)
+        notify: true,                   // "Nuevo vídeo listo" message (not possible in native <video> fullscreen)
+    }, SETTINGS.new_video || {}));
 
     // =======================================================================
     // Add future modules here:  V.modules.<name> = (function (core, CFG) { ... })(core, V.config.<name> = {...});
