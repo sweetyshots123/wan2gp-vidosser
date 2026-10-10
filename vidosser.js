@@ -396,7 +396,7 @@
             if (o.cue) { try { o.track.removeCue(o.cue); } catch (_) { /* gone */ } o.cue = null; }
             o.track.mode = "hidden";
         }
-        function nativeOsd(video, text) {
+        function nativeOsd(video, text, sticky = false) {
             let o = osd.get(video);
             if (!o) {
                 const own = [...video.textTracks].some(t => t.kind === "subtitles" || t.kind === "captions");
@@ -419,7 +419,7 @@
             if (video.paused && !video.seeking && video.played.length === 0 && video.readyState >= 1) {
                 try { video.currentTime = video.currentTime; } catch (_) { /* ignore */ }
             }
-            o.timer = setTimeout(() => clearOsd(video), CFG.overlay_ms);
+            o.timer = sticky ? 0 : setTimeout(() => clearOsd(video), CFG.overlay_ms);
         }
         document.addEventListener("fullscreenchange", () => { for (const v of document.querySelectorAll("video.vidosser-osd")) if (fsElement() !== v) clearOsd(v); });
         function showOverlay(video, text) {
@@ -690,7 +690,7 @@
         return { CFG, KEYS, IS_FIREFOX, getInfo, ensureFps, lastFrameOf, probeMedia: probeMp4,
                  fsElement, eligible, isVisible, biggestVideoIn, videoAtPoint, videoForPointerEvent,
                  videoForKeyboard, touch, typingOrModal, showOverlay, fpsLabel, settled, seekTo, seekPending, seekNow,
-                 onUserAction, beforeUserAction,
+                 onUserAction, beforeUserAction, nativeOsd, clearOsd,
                  toast, flash, sound, nativeVideoFs,
                  registerAction, bridge, bridgeResponse,
                  middlePress: null,                    // video under an ongoing middle-button press (save_frame)
@@ -712,6 +712,7 @@
         save_frame_as: "d",
         toggle_loop: "l",
         toggle_boomerang: "b",
+        toggle_info: "p",
         mark_in: "i",
         mark_out: "o",
         clear_segment: "u",
@@ -2415,5 +2416,123 @@
     })(240);
 
     window.vidosser = V;                       // debug / scripting hook
+    // =======================================================================
+    // MODULE info - video info panel (keys.toggle_info, default P): file, resolution, fps,
+    // duration, current frame / time, speed, volume, loop state, file size. Updated live
+    // (4x per second) until P is pressed again or Esc. Drawn at the top right of the picture,
+    // inside the fullscreen element when there is one; in native <video> fullscreen it is
+    // shown as the subtitle cue (one block of lines). File size: one HEAD request, cached.
+    // =======================================================================
+    V.modules.info = (function (core) {
+        let shown = null, panel = null, timer = 0, lastText = "";
+        const sizes = new Map();                  // src -> bytes | null (unknown) | "pending"
+        const fmtTime = t => {
+            if (!Number.isFinite(t)) return "?";
+            const m = Math.floor(t / 60), sec = t - m * 60;
+            return (m ? m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(2) : sec.toFixed(2) + " s");
+        };
+        const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? Math.round(b / 1024) + " KB" : b + " B";
+        const srcOf = v => v.currentSrc || v.src || "";
+        function fileName(v) {
+            const u = srcOf(v);
+            if (!u) return "?";
+            try { return decodeURIComponent(u.split("?")[0]).split(/[\\/=]/).pop() || "?"; } catch (_) { return u.split(/[\\/=]/).pop() || "?"; }
+        }
+        function size(v) {
+            const u = srcOf(v);
+            if (!u || u.startsWith("blob:") || u.startsWith("data:")) return null;
+            if (sizes.has(u)) { const b = sizes.get(u); return typeof b === "number" ? b : null; }
+            sizes.set(u, "pending");
+            fetch(u, { method: "HEAD" }).then(r => {
+                const n = Number(r.headers.get("content-length"));
+                sizes.set(u, r.ok && n > 0 ? n : null);
+            }).catch(() => sizes.set(u, null));
+            return null;
+        }
+        function text(v) {
+            const info = core.getInfo(v), fps = info.fps;
+            const src = info.fpsSource === "mp4" ? "" : info.fpsSource === "playback" ? i18n(" (measured)", " (medido)") :
+                info.fpsSource === "default" ? i18n(" (default, not detected)", " (por defecto, no detectado)") : "";
+            const last = fps ? core.lastFrameOf(v, info) : NaN;
+            const frames = Number.isFinite(last) ? last + 1 : (fps && Number.isFinite(v.duration) ? Math.round(v.duration * fps) : NaN);
+            const cur = fps ? Math.floor(v.currentTime * fps + 1e-3) : NaN;
+            const curF = Number.isFinite(cur) ? (Number.isFinite(last) ? Math.min(cur, last) : cur) : NaN;
+            const L = V.modules.loop, seg = L && L.segment ? L.segment(v) : null;
+            const looping = L && L.loopWanted ? !!L.loopWanted(v) : v.loop;
+            const boom = L && L.boomerang && L.boomerang.on(v);
+            let loop = !looping && !(seg && seg.in !== undefined && seg.out !== undefined) ? i18n("off", "no") : boom ? "Boomerang" : i18n("normal", "normal");
+            if (seg && Number.isFinite(seg.in) && Number.isFinite(seg.out)) loop += ` · A-B ${seg.in}–${seg.out}`;
+            else if (seg && Number.isFinite(seg.in)) loop += ` · A ${seg.in}`;
+            if (L && L.boomerang && L.boomerang.reversing(v)) loop += i18n(" (backwards)", " (hacia atrás)");
+            const b = size(v);
+            const lines = [
+                fileName(v),
+                `${i18n("Resolution", "Resolución")}: ${v.videoWidth || "?"}×${v.videoHeight || "?"}`,
+                `FPS: ${fps ? Math.round(fps * 1000) / 1000 : "?"}${src}`,
+                `${i18n("Duration", "Duración")}: ${fmtTime(v.duration)} · ${Number.isFinite(frames) ? frames : "?"} ${i18n("frames", "fotogramas")}`,
+                `${i18n("Frame", "Fotograma")}: ${Number.isFinite(curF) ? curF : "?"}${Number.isFinite(last) ? " / " + last : ""} · ${fmtTime(v.currentTime)}`,
+                `${i18n("Speed", "Velocidad")}: ${(v.playbackRate || 1).toFixed(2)}×${v.paused ? i18n(" (paused)", " (en pausa)") : ""}`,
+                `${i18n("Volume", "Volumen")}: ${v.muted ? i18n("muted", "silenciado") : Math.round(v.volume * 100) + " %"}`,
+                `${i18n("Loop", "Bucle")}: ${loop}`,
+            ];
+            if (b) lines.push(`${i18n("File size", "Tamaño")}: ${fmtSize(b)}`);
+            return lines.join("\n");
+        }
+        function place(v) {
+            const fs = core.fsElement(), host = fs || document.body;
+            if (!panel) {
+                panel = document.createElement("div");
+                panel.className = "vidosser-info";
+                panel.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;background:rgba(0,0,0,.72);color:#fff;" +
+                    "font:600 13px/1.4 ui-monospace,Consolas,monospace;padding:6px 10px;border-radius:6px;white-space:pre;max-width:60vw;overflow:hidden;";
+            }
+            if (panel.parentNode !== host) host.appendChild(panel);
+            const r = v.getBoundingClientRect();
+            let x = r.left, y = r.top, w = r.width;
+            if (v.videoWidth && v.videoHeight) {
+                const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+                x += (r.width - v.videoWidth * k) / 2; y += (r.height - v.videoHeight * k) / 2; w = v.videoWidth * k;
+            }
+            panel.style.display = "block";
+            panel.style.top = Math.round(y + 8) + "px";
+            panel.style.left = Math.round(x + w - 8 - panel.offsetWidth) + "px";
+        }
+        function update() {
+            const v = shown;
+            if (!v) return;
+            if (!v.isConnected) { hide(); return; }
+            const t = text(v);
+            if (core.fsElement() === v) {                                // native fullscreen: subtitle cue
+                if (panel) panel.style.display = "none";
+                const tr = [...v.textTracks].find(x => x.label === "Vidosser");
+                const cur = tr && tr.cues && tr.cues.length ? tr.cues[tr.cues.length - 1].text : "";
+                if (t !== lastText || cur !== t || (tr && tr.mode !== "showing")) { core.nativeOsd(v, t, true); lastText = t; }   // (a short overlay may have replaced it)
+                return;
+            }
+            if (lastText) { core.clearOsd(v); lastText = ""; }
+            if (!panel || panel.textContent !== t) { place(v); panel.textContent = t; }
+            place(v);
+        }
+        function show(v) {
+            if (shown && shown !== v) core.clearOsd(shown);
+            shown = v; lastText = "";
+            core.ensureFps(v);
+            update();
+            clearInterval(timer);
+            timer = setInterval(update, 250);
+        }
+        function hide() {
+            clearInterval(timer); timer = 0;
+            if (shown) core.clearOsd(shown);
+            shown = null; lastText = "";
+            if (panel) panel.style.display = "none";
+        }
+        core.registerAction("toggle_info", v => { if (shown === v) hide(); else show(v); });
+        // Esc closes the panel only (Gradio's gallery would also close its preview)
+        window.addEventListener("keydown", e => { if (e.key === "Escape" && shown) { hide(); e.preventDefault(); e.stopPropagation(); } }, true);
+        document.addEventListener("fullscreenchange", () => { if (shown) { lastText = ""; setTimeout(update, 50); } });
+        return { shown: () => shown, text: v => text(v), show, hide };
+    })(core);
+
     console.log(`[Vidosser] v${VERSION} loaded - modules: ${Object.keys(V.modules).filter(k => V.modules[k]).join(", ")}`);
 })();

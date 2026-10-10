@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.8] - 2026-10-11
+### Added
+- **Video info panel** (`keys.toggle_info`, default `P`; Keys: *Video info* / *Información del vídeo*): toggles a panel at the top right of the picture with the file name, resolution (`videoWidth×videoHeight`), FPS (detected from the file, measured during playback, or the default when not detected), duration (time + frame count), current frame / time, playback speed (and paused), volume / muted, loop state (off / normal / Boomerang, A-B segment, going backwards) and file size (one HEAD request, shown when known; never blocks). Updated live 4× per second; stays until P again or Esc (Esc then only closes the panel). Inside the fullscreen element in container / gallery fullscreen; in native `<video>` fullscreen it is shown as the Vidosser subtitle cue (kept while the panel is on). Codec is not shown (not available cheaply in the browser). If a settings file already uses P for another action, that key wins and the info action gets a free key.
+
 ## [1.4.7] - 2026-10-09
 ### Added
 - **Hold Ctrl to drag the volume** (`volume.drag_require_ctrl`, default `false`; tab: *Hold Ctrl to drag the volume* / *Mantener Control pulsado para arrastrar el volumen* in the Volume section). When on, a drag with the volume button changes the volume only if Ctrl is held when the press starts; that drag is then volume only (vertical counts, sideways ignored, never scrubs, the click / context menu that ends it is swallowed). Without Ctrl the button behaves as if the volume drag were off (a normal frame drag if it is the scrub button, a plain button otherwise). With the same button for both, Ctrl + drag changes the volume instead of short jumps. The browser's default for the Ctrl + press (selection etc.) is prevented; Ctrl + wheel is unchanged; the cursor rule is unchanged; touch is not affected. Older `settings.json` files get `false`.

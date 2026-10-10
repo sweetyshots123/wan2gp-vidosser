@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.7
+*[English](README.md)* · Licencia MIT · versión 1.4.8
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -84,6 +84,10 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 - Sin barra: **clic** sobre el vídeo o **Espacio** = reproducir / pausar, y se puede arrastrar sobre **toda la imagen** para pasar fotogramas (sin la zona de 40 px).
 - «Barra de progreso fina (3 px)» (`show_thin_progress`, activada por defecto): una línea de 3 px, que no se puede pulsar, en el borde inferior de la imagen indica la posición mientras los controles están ocultos.
 
+## Información del vídeo (`P`)
+
+- **P** muestra un panel arriba a la derecha del vídeo con: nombre del archivo, resolución, FPS (detectados, medidos o *por defecto* si no se pudieron detectar), duración (tiempo y número de fotogramas), fotograma y tiempo actuales, velocidad, volumen / silencio, estado del bucle (no / normal / Boomerang, segmento A-B) y tamaño del archivo (si el servidor lo indica). Se actualiza en directo y se queda hasta que pulsas **P** otra vez o **Esc**. Funciona dentro y fuera de la pantalla completa; en la pantalla completa nativa del vídeo se muestra como un bloque de subtítulos.
+
 ## Bucle (`loop`)
 
 - **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (activado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
@@ -126,7 +130,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.7.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.8.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
@@ -167,6 +171,7 @@ Sección `keys` (una tecla por acción, sin distinguir mayúsculas; no actúan c
 | `jump_forward` | `"w"` | salto adelante |
 | `jump_back` | `"q"` | salto atrás |
 | `save_frame_as` | `"d"` | guardar el fotograma actual |
+| `toggle_info` | `"p"` | panel de información del vídeo sí/no |
 | `toggle_loop` | `"l"` | bucle sí/no del vídeo actual |
 | `toggle_boomerang` | `"b"` | Boomerang sí/no del vídeo actual |
 | `mark_in` | `"i"` | inicio del segmento A-B |

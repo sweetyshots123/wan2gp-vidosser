@@ -15,6 +15,7 @@ Current tools (modules):
   * loop: loop all videos, L = loop on/off for the current video, I / O = A-B segment
     loop (frame accurate), U = clear the segment; loop.mode normal | boomerang (ping-pong,
     also between A and B; B = boomerang on/off for the current video).
+  * info: P = video info panel (file, resolution, fps, duration, frame, speed, volume, loop, size).
   * container_fs: video fullscreen on its container so overlays / messages stay visible.
   * save_frame: D (or a middle click / wheel click on the video) = save the displayed frame as PNG/JPG, extracted server-side from
     the source video with WanGP's own decoder (lossless, exact frame), either with
@@ -46,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.7"
+PLUGIN_VERSION = "1.4.8"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -71,6 +72,7 @@ _TEXT = {
     "key_jump_back": ("Jump back", "Salto atrás"),
     "key_save_frame_as": ("Save frame", "Guardar fotograma"),
     "key_toggle_loop": ("Loop on/off (this video)", "Bucle on/off (este vídeo)"),
+    "key_toggle_info": ("Video info", "Información del vídeo"),
     "key_toggle_boomerang": ("Boomerang on/off (this video)", "Boomerang sí/no (este vídeo)"),
     "key_mark_in": ("A-B segment start", "Inicio del segmento A-B"),
     "key_mark_out": ("A-B segment end", "Final del segmento A-B"),
@@ -299,7 +301,7 @@ class LocalizedError(Exception):
 
 
 # (action, English label); localized labels: tr("key_<action>", lang)
-KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as",
+KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as", "toggle_info",
                                                    "toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")]
 LOOP_ACTIONS = ("toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")
 
@@ -322,7 +324,8 @@ DEFAULT_SETTINGS = {
         "jump_back": "q",
         "save_frame_as": "d",
         "toggle_loop": "l",         # loop on/off for the current video
-        "toggle_boomerang": "b",    # boomerang (ping-pong) loop on/off for the current video
+        "toggle_boomerang": "b",
+        "toggle_info": "p",         # video info panel on/off (resolution, fps, duration, frame, ...)    # boomerang (ping-pong) loop on/off for the current video
         "mark_in": "i",             # A-B segment loop: start = current frame
         "mark_out": "o",            # A-B segment loop: end = current frame
         "clear_segment": "u",       # remove the A-B segment
