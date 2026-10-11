@@ -715,6 +715,7 @@
         toggle_info: "p",
         prev_video: "e",
         next_video: "r",
+        reset_zoom: "z",
         mark_in: "i",
         mark_out: "o",
         clear_segment: "u",
@@ -989,9 +990,14 @@
             let notches = pinch ? countPinchNotches(e) : countNotches(e);
             if (!notches) return;
             if (CFG.invert_direction) notches = -notches;
+            const Z = V.modules.zoom, zoomMode = String(CFG.wheel_action || "frames").toLowerCase() === "zoom";
             if (mod) {
                 if (String(CFG.wheel_mod_action || "jump").toLowerCase() === "speed") setSpeed(video, notches);
                 else queueSteps(video, 0, notches);
+            } else if (zoomMode && e.shiftKey) {
+                queueSteps(video, notches, 0);                            // 1.4.11 zoom mode: Shift + wheel = 1 frame
+            } else if (zoomMode && Z && Z.possible(video)) {
+                Z.wheel(video, notches, e.clientX, e.clientY);            // 1.4.11: forward = zoom in, at the cursor
             } else {
                 queueSteps(video, notches * (e.shiftKey ? Math.max(1, Math.round(CFG.shift_frames)) : 1), 0);
             }
@@ -1153,6 +1159,21 @@
             if (!drag.active) {
                 const adx = Math.abs(dx), ady = Math.abs(dy);
                 if (Math.max(adx, ady) < DRAG_THRESHOLD) return;          // not decided yet: still a click
+                const Z = V.modules.zoom;
+                if (drag.scrub && !drag.modVol && Z && Z.level(drag.v) > 1) {   // 1.4.11: zoomed -> the scrub button pans
+                    drag.axis = "pan"; drag.active = true; drag.px = 0; drag.py = 0;
+                    capture(drag);
+                }
+            }
+            if (drag.axis === "pan") {
+                e.preventDefault();
+                const ddx = (locked ? drag.dx : e.clientX - drag.x0) - drag.px, ddy = (locked ? drag.dy : e.clientY - drag.y0) - drag.py;
+                drag.px += ddx; drag.py += ddy;
+                if (ddx || ddy) V.modules.zoom.pan(drag.v, ddx, ddy);
+                return;
+            }
+            if (!drag.active) {
+                const adx = Math.abs(dx), ady = Math.abs(dy);
                 const axis = drag.volOnly || ady > adx ? "y" : "x";         // dominant direction, locked from now on
                 const fsTouch = e.pointerType !== "touch" || !!core.fsElement();   // touch outside fullscreen: vertical = page scroll
                 // separate buttons: a vertical drag with the scrub button is still a drag (does nothing,
@@ -1290,6 +1311,7 @@
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
         wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
+        wheel_action: "frames",       // plain wheel: "frames" | "zoom" (1.4.11)
         wheel_mod_action: "jump",     // what the modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate)
         speed_remember: true,         // keep the last playbackRate for later videos (also after reload)
         shift_frames: 10,
@@ -2050,6 +2072,8 @@
             if (cv.width !== c.w || cv.height !== c.h) { cv.width = c.w; cv.height = c.h; }
             const p = pictureRectOf(v);
             Object.assign(cv.style, { left: p.x + "px", top: p.y + "px", width: p.w + "px", height: p.h + "px", display: "block" });
+            const zc = V.modules.zoom && V.modules.zoom.clipRect(v);     // 1.4.11: zoomed -> only inside the video box
+            cv.style.clipPath = zc ? `inset(${Math.max(0, zc.top - p.y)}px ${Math.max(0, p.x + p.w - zc.right)}px ${Math.max(0, p.y + p.h - zc.bottom)}px ${Math.max(0, zc.left - p.x)}px)` : "";
             cv.getContext("2d").drawImage(bm, 0, 0, c.w, c.h);
             lastDrawn.set(v, f);
             st.canvas = true; st.drawn++;
@@ -2507,6 +2531,74 @@
 
     window.vidosser = V;                       // debug / scripting hook
     // =======================================================================
+    // MODULE zoom (1.4.11) - frame_step.wheel_action "zoom": the plain wheel zooms the video at the
+    // cursor (CSS transform on the <video>, origin top-left, ×1.25 per notch, 1× .. max(8×, 4 screen
+    // px per video px)); while zoomed the scrub button pans (frame_step drag); the picture always
+    // covers the video box (clamped). Reset to 1× on a new src, on leaving fullscreen, with
+    // keys.reset_zoom (Z) and when zooming out to 1×. Not in native <video> fullscreen (nothing can
+    // be transformed there). The Boomerang canvas follows the transform (it is laid over the
+    // video's on-screen rect) and is clipped to the video box.
+    // =======================================================================
+    V.modules.zoom = (function (core, FS) {
+        const st = new Map();                      // video -> { s, tx, ty, clip: {el, overflow} }
+        const STEP = 1.25;
+        const level = v => (st.get(v) || { s: 1 }).s;
+        const possible = v => !!v && core.fsElement() !== v;
+        function maxZoom(v) {
+            const w = v.offsetWidth, h = v.offsetHeight;
+            if (!w || !v.videoWidth) return 8;
+            const k = Math.min(w / v.videoWidth, h / v.videoHeight);   // screen px per video px at 1×
+            return Math.max(8, 4 / k);
+        }
+        function apply(v, z) {
+            if (!z || z.s <= 1.0001) {
+                v.style.transform = ""; v.style.transformOrigin = "";
+                if (z && z.clip) z.clip.el.style.overflow = z.clip.overflow;
+                st.delete(v); return;
+            }
+            const w = v.offsetWidth, h = v.offsetHeight;
+            z.tx = Math.min(0, Math.max(w - w * z.s, z.tx));
+            z.ty = Math.min(0, Math.max(h - h * z.s, z.ty));
+            if (!z.clip && v.parentElement) { z.clip = { el: v.parentElement, overflow: v.parentElement.style.overflow }; v.parentElement.style.overflow = "hidden"; }
+            v.style.transformOrigin = "0 0";
+            v.style.transform = `translate(${z.tx}px, ${z.ty}px) scale(${z.s})`;
+        }
+        function show(v) { core.showOverlay(v, `Zoom ${level(v).toFixed(1)}×`); }
+        function wheel(v, notches, cx, cy) {
+            if (!possible(v)) return;
+            const z = st.get(v) || { s: 1, tx: 0, ty: 0 };
+            const r = v.getBoundingClientRect();
+            const L0 = r.left - z.tx, T0 = r.top - z.ty;                  // untransformed box
+            const u = (cx - L0 - z.tx) / z.s, w = (cy - T0 - z.ty) / z.s;   // point under the cursor, element units
+            const s1 = Math.max(1, Math.min(maxZoom(v), z.s * Math.pow(STEP, notches)));
+            z.tx = cx - L0 - u * s1; z.ty = cy - T0 - w * s1; z.s = s1;
+            st.set(v, z); apply(v, z); core.touch(v); show(v);
+            if (s1 <= 1.0001) reset(v, true);
+        }
+        function pan(v, dx, dy) {
+            const z = st.get(v); if (!z) return;
+            z.tx += dx; z.ty += dy; apply(v, z);
+        }
+        function reset(v, quiet) {
+            const z = st.get(v);
+            if (!z && !quiet) return;
+            apply(v, z ? Object.assign(z, { s: 1 }) : null);
+            if (!quiet) core.showOverlay(v, "Zoom 1×");
+        }
+        function resetAll() { for (const v of [...st.keys()]) reset(v, true); }
+        // clip rect for overlays drawn above the video (Boomerang canvas)
+        function clipRect(v) { const z = st.get(v); return z && z.clip ? z.clip.el.getBoundingClientRect() : null; }
+        for (const t of ["loadstart", "emptied"]) window.addEventListener(t, e => { if (st.has(e.target)) reset(e.target, true); }, true);
+        document.addEventListener("fullscreenchange", () => {
+            const fs = core.fsElement();
+            for (const v of [...st.keys()]) if (!fs || !(fs === v || fs.contains(v)) || fs === v) reset(v, true);
+        });
+        window.addEventListener("resize", () => { for (const [v, z] of st) apply(v, z); });
+        core.registerAction("reset_zoom", v => reset(v, false));
+        return { level, possible, wheel, pan, reset, resetAll, clipRect };
+    })(core, V.config.frame_step);
+
+    // =======================================================================
     // MODULE info - video info panel (keys.toggle_info, default P): file, resolution, fps,
     // duration, current frame / time, speed, volume, loop state, file size. Updated live
     // (4x per second) until P is pressed again or Esc. Drawn at the top right of the picture,
@@ -2562,6 +2654,7 @@
                 `${i18n("Duration", "Duración")}: ${fmtTime(v.duration)} · ${Number.isFinite(frames) ? frames : "?"} ${i18n("frames", "fotogramas")}`,
                 `${i18n("Frame", "Fotograma")}: ${Number.isFinite(curF) ? curF : "?"}${Number.isFinite(last) ? " / " + last : ""} · ${fmtTime(v.currentTime)}`,
                 `${i18n("Speed", "Velocidad")}: ${(v.playbackRate || 1).toFixed(2)}×${v.paused ? i18n(" (paused)", " (en pausa)") : ""}`,
+                `Zoom: ${(V.modules.zoom ? V.modules.zoom.level(v) : 1).toFixed(1)}×`,
                 `${i18n("Volume", "Volumen")}: ${v.muted ? i18n("muted", "silenciado") : Math.round(v.volume * 100) + " %"}`,
                 `${i18n("Loop", "Bucle")}: ${loop}`,
             ];

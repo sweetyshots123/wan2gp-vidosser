@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.11] - 2026-10-11
+### Added
+- **Wheel zoom** (`frame_step.wheel_action`: `"frames"` | `"zoom"`, default `"frames"`; tab «La rueda hace»: «Pasar fotogramas» / «Zoom»). Zoom mode: the plain wheel zooms the video at the cursor (CSS transform, ×1.25 per notch, 1× to max(8×, ~4 screen px per video px)); forward wheel direction (as for frames, `invert_direction` flips it) = zoom in; overlay «Zoom 2.4×»; the info panel shows the zoom. While zoomed the scrub button pans (clamped so the picture always covers the video box); Shift + wheel = 1 frame; Ctrl + wheel, keys and the volume drag unchanged. Reset to 1× with **Z** (`keys.reset_zoom`, «Quitar zoom»), when zooming out to 1×, on a new video (E / R / gallery) and on leaving fullscreen. Works outside fullscreen and in the container fullscreen; not in native `<video>` fullscreen. The Boomerang reverse canvas follows the zoom (clipped to the video box). Saved frames are always the full frame.
+
 ## [1.4.10] - 2026-10-11
 ### Added
 - **E / R: previous / next video of the gallery** (`keys.prev_video` «Vídeo anterior», `keys.next_video` «Vídeo siguiente»). Selects the adjacent thumbnail, also inside Vidosser's container fullscreen (it stays fullscreen; an explicit choice, so the no-autojump protection doesn't block it and any pending «new video» state is dropped). Stops at the ends with «Primer vídeo» / «Último vídeo». Remembered volume / speed apply as usual. Older settings.json files get E / R unless those keys are already used (then free keys, as for other new keys).

@@ -1,6 +1,6 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.10
+*[Español](README.es.md)* · MIT License · v1.4.11
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
@@ -61,6 +61,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 
 **Video info** (`P`, `keys.toggle_info`)
 - **E** / **R** go to the previous / next video of the gallery (also in fullscreen, which stays on; at the ends: *First video* / *Last video*). Configurable as *Previous video* / *Next video*.
+- **Wheel zoom** (setting *Wheel does*: *Step frames* / *Zoom*, default step frames): in zoom mode the plain wheel zooms the video at the cursor (×1.25 per notch, from 1× up to 8× or more, enough for about 4 screen pixels per video pixel); the wheel direction that steps frames forward zooms in (*Invert wheel direction* flips it). While zoomed, dragging with the scrub button pans the picture (it always covers the video box); Shift + wheel steps 1 frame; Ctrl + wheel and the frame keys work as usual; volume drag is unchanged. **Z** (*Remove zoom*) goes back to 1×, as do zooming out to 1×, changing video (E / R / gallery) and leaving fullscreen. *Wheel only in fullscreen* applies too. Not possible in the browser's native video fullscreen. Saving a frame always saves the whole frame.
 - **P** shows a panel at the top right of the video with: file name, resolution, FPS (detected, measured or *default* if it couldn't be detected), duration (time and frame count), current frame and time, playback speed, volume / muted, loop state (off / normal / Boomerang, A-B segment) and file size (when the server reports it). It updates live and stays until you press **P** again or **Esc**. Works in and outside fullscreen; in the video's native fullscreen it is shown as a subtitle block.
 
 **Loop**
@@ -204,7 +205,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.10.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.11.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -255,12 +256,13 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
 - **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.10 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.11 loaded`.
 - **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.11**: optional wheel zoom (*Wheel does: Zoom*) to see the video at full resolution; drag pans while zoomed; Z removes the zoom.
 - **1.4.10**: E / R = previous / next gallery video (also in fullscreen, stops at the ends); double-click fullscreen always uses Vidosser's container (gallery thumbnails and bars visible); Chrome's own video fullscreen is turned off on those videos while *container fullscreen* is on; gallery thumbnail clicks are never swallowed after a scrub.
 - **1.4.9**: L with an A-B segment clears it and turns the loop off; loop on/off kept per file even if the gallery serves it under another URL; Boomerang stops bouncing when the loop is turned off.
 - **1.4.8**: P = video info panel (resolution, FPS, duration, frame, speed, volume, loop, size).
