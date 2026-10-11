@@ -1676,8 +1676,14 @@
         const toggle = v => { if (v.paused) v.play().catch(() => {}); else v.pause(); core.touch(v); };
         window.addEventListener("click", e => {
             const v = e.target;
-            if (e.button !== 0 || !(v instanceof HTMLVideoElement) || !hiddenByUs(v) || e.defaultPrevented) return;
-            toggle(v);
+            if (e.button !== 0 || !(v instanceof HTMLVideoElement) || e.defaultPrevented) return;
+            if (hiddenByUs(v)) { toggle(v); return; }
+            // 1.4.10: with controlsList="nofullscreen" (container fullscreen on) Chrome no longer plays /
+            // pauses on a click on the picture: do it here (not on the native control bar at the bottom)
+            if (v.controls && v.dataset.vidosserNofs) {
+                const r = v.getBoundingClientRect();
+                if (e.clientY <= r.bottom - 48) toggle(v);
+            }
         });
         window.addEventListener("keydown", e => {
             if (e.key !== " " || e.ctrlKey || e.altKey || e.metaKey || e.repeat || core.typingOrModal(e)) return;
