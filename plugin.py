@@ -73,6 +73,8 @@ _TEXT = {
     "key_save_frame_as": ("Save frame", "Guardar fotograma"),
     "key_toggle_loop": ("Loop on/off (this video)", "Bucle on/off (este vídeo)"),
     "key_toggle_info": ("Video info", "Información del vídeo"),
+    "key_prev_video": ("Previous video", "Vídeo anterior"),
+    "key_next_video": ("Next video", "Vídeo siguiente"),
     "key_toggle_boomerang": ("Boomerang on/off (this video)", "Boomerang sí/no (este vídeo)"),
     "key_mark_in": ("A-B segment start", "Inicio del segmento A-B"),
     "key_mark_out": ("A-B segment end", "Final del segmento A-B"),
@@ -301,7 +303,7 @@ class LocalizedError(Exception):
 
 
 # (action, English label); localized labels: tr("key_<action>", lang)
-KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as", "toggle_info",
+KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as", "toggle_info", "prev_video", "next_video",
                                                    "toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")]
 LOOP_ACTIONS = ("toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")
 
@@ -325,6 +327,8 @@ DEFAULT_SETTINGS = {
         "save_frame_as": "d",
         "toggle_loop": "l",         # loop on/off for the current video
         "toggle_boomerang": "b",
+        "prev_video": "e",          # previous / next video of the gallery (also in fullscreen)
+        "next_video": "r",
         "toggle_info": "p",         # video info panel on/off (resolution, fps, duration, frame, ...)    # boomerang (ping-pong) loop on/off for the current video
         "mark_in": "i",             # A-B segment loop: start = current frame
         "mark_out": "o",            # A-B segment loop: end = current frame

@@ -3,6 +3,8 @@
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [1.4.10] - 2026-10-11
+### Added
+- **E / R: previous / next video of the gallery** (`keys.prev_video` «Vídeo anterior», `keys.next_video` «Vídeo siguiente»). Selects the adjacent thumbnail, also inside Vidosser's container fullscreen (it stays fullscreen; an explicit choice, so the no-autojump protection doesn't block it and any pending «new video» state is dropped). Stops at the ends with «Primer vídeo» / «Último vídeo». Remembered volume / speed apply as usual. Older settings.json files get E / R unless those keys are already used (then free keys, as for other new keys).
 ### Fixed
 - **Double-click fullscreen without gallery thumbnails / progress bars.** Chrome's own `<video>` fullscreen sometimes won the double-click over Vidosser's container fullscreen (when the second press did not reach Vidosser's handler). It can't be moved to the container afterwards (Chrome refuses a fullscreen request without a fresh click), so it is now prevented: while *container fullscreen* is on, the videos Vidosser handles get `controlsList="nofullscreen"` (no fullscreen button in Chrome's native bar, no native double-click fullscreen), and the `dblclick` event itself also enters the container fullscreen if the second press was missed. Gradio's gallery fullscreen button and Vidosser's double-click are unaffected. Turning *container fullscreen* off restores Chrome's own fullscreen.
 - A click on a gallery thumbnail right after a drag-scrub is never swallowed (the "click that ends the drag" rule covered the whole gallery block).

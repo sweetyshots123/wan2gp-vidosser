@@ -60,6 +60,7 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - *Thin progress bar* (`show_thin_progress`, on by default): a 3 px, non-clickable line at the very bottom of the picture shows the position while the controls are hidden.
 
 **Video info** (`P`, `keys.toggle_info`)
+- **E** / **R** go to the previous / next video of the gallery (also in fullscreen, which stays on; at the ends: *First video* / *Last video*). Configurable as *Previous video* / *Next video*.
 - **P** shows a panel at the top right of the video with: file name, resolution, FPS (detected, measured or *default* if it couldn't be detected), duration (time and frame count), current frame and time, playback speed, volume / muted, loop state (off / normal / Boomerang, A-B segment) and file size (when the server reports it). It updates live and stays until you press **P** again or **Esc**. Works in and outside fullscreen; in the video's native fullscreen it is shown as a subtitle block.
 
 **Loop**
@@ -260,7 +261,7 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
-- **1.4.10**: double-click fullscreen always uses Vidosser's container (gallery thumbnails and bars visible); Chrome's own video fullscreen is turned off on those videos while *container fullscreen* is on; gallery thumbnail clicks are never swallowed after a scrub.
+- **1.4.10**: E / R = previous / next gallery video (also in fullscreen, stops at the ends); double-click fullscreen always uses Vidosser's container (gallery thumbnails and bars visible); Chrome's own video fullscreen is turned off on those videos while *container fullscreen* is on; gallery thumbnail clicks are never swallowed after a scrub.
 - **1.4.9**: L with an A-B segment clears it and turns the loop off; loop on/off kept per file even if the gallery serves it under another URL; Boomerang stops bouncing when the loop is turned off.
 - **1.4.8**: P = video info panel (resolution, FPS, duration, frame, speed, volume, loop, size).
 - **1.4.7**: optional *Hold Ctrl to drag the volume*.

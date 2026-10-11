@@ -86,6 +86,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 ## Información del vídeo (`P`)
 
+- **E** / **R** pasan al vídeo anterior / siguiente de la galería (también en pantalla completa, que se mantiene; en los extremos: «Primer vídeo» / «Último vídeo»). Configurables como «Vídeo anterior» / «Vídeo siguiente».
 - **P** muestra un panel arriba a la derecha del vídeo con: nombre del archivo, resolución, FPS (detectados, medidos o *por defecto* si no se pudieron detectar), duración (tiempo y número de fotogramas), fotograma y tiempo actuales, velocidad, volumen / silencio, estado del bucle (no / normal / Boomerang, segmento A-B) y tamaño del archivo (si el servidor lo indica). Se actualiza en directo y se queda hasta que pulsas **P** otra vez o **Esc**. Funciona dentro y fuera de la pantalla completa; en la pantalla completa nativa del vídeo se muestra como un bloque de subtítulos.
 
 ## Bucle (`loop`)

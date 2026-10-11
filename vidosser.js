@@ -713,6 +713,8 @@
         toggle_loop: "l",
         toggle_boomerang: "b",
         toggle_info: "p",
+        prev_video: "e",
+        next_video: "r",
         mark_in: "i",
         mark_out: "o",
         clear_segment: "u",
@@ -2404,6 +2406,29 @@
                 userNavUntil = performance.now() + 1500; blocked = null;
             }
         }, true);
+        // 1.4.10: keys.prev_video / keys.next_video (E / R): select the adjacent thumbnail of the gallery,
+        // also in the container fullscreen (it stays); an explicit user action, so never blocked. Stops
+        // at the ends. In fullscreen it also ends any pending "new video" state (the user chose).
+        function step(v, dir) {
+            const all = thumbs(v);
+            if (!all.length) { core.toast(i18n("No gallery for this video", "Este vídeo no está en una galería"), "info", 1500); return; }
+            let i = all.findIndex(t => t.classList.contains("selected"));
+            if (i < 0) i = all.findIndex(t => t === thumbFor(v, abs(v.currentSrc || v.src)));
+            const j = i + dir;
+            if (i >= 0 && (j < 0 || j >= all.length)) {
+                const msg = dir < 0 ? i18n("First video", "Primer vídeo") : i18n("Last video", "Último vídeo");
+                core.toast(msg, "info", 1200); core.showOverlay(v, msg); return;
+            }
+            const t = all[Math.max(0, Math.min(all.length - 1, j))];
+            userNavUntil = performance.now() + 1500; blocked = null;
+            const fsm = V.modules.frame_step;
+            if (fsm && fsm.clearSwallow) fsm.clearSwallow();
+            t.click();
+            const n = all.indexOf(t) + 1;
+            setTimeout(() => core.showOverlay(v, `${dir < 0 ? i18n("Previous video", "Vídeo anterior") : i18n("Next video", "Vídeo siguiente")} · ${n}/${all.length}`), 150);
+        }
+        core.registerAction("prev_video", v => step(v, -1));
+        core.registerAction("next_video", v => step(v, 1));
         function onFullscreenChange() {
             if (core.fsElement() || !blocked) return;
             const b = blocked; blocked = null;
