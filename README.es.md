@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.8
+*[English](README.md)* · Licencia MIT · versión 1.4.9
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -90,7 +90,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 ## Bucle (`loop`)
 
-- **L** activa o desactiva el bucle del vídeo actual. «Repetir todos los vídeos en bucle» (activado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
+- **L** activa o desactiva el bucle del vídeo actual. Si el vídeo tiene un segmento A-B, **L** lo borra y desactiva el bucle de este vídeo de una vez (mensaje «Bucle borrado»); pulsa **L** otra vez para volver a repetirlo. (**U** solo borra el segmento: con «Repetir todos los vídeos en bucle» activado, el vídeo entero sigue en bucle.) «Repetir todos los vídeos en bucle» (activado por defecto) hace que todos los vídeos se repitan, también los que aparezcan después; al desactivarlo, cada vídeo vuelve a su estado original.
 - **Boomerang** («Modo de bucle» en la pestaña Vidosser, o **B** para el vídeo actual): en lugar de volver al principio, un vídeo en bucle va hacia atrás desde el último fotograma hasta el primero y luego otra vez hacia delante, como un rebote. Con un segmento A-B rebota entre A y B. Hacia atrás va sin sonido (el vídeo está en pausa; el sonido vuelve al ir hacia delante) y sigue la velocidad de reproducción (0,25–2,00×). Hacia atrás usa los fotogramas guardados mientras el vídeo iba hacia delante, así que desde el primer rebote es tan fluido como hacia delante; la primera vez tras cargarlo, o en la pantalla completa nativa del vídeo, salta fotograma a fotograma (fluido en clips pequeños, a saltos en los grandes). Play/pausa mientras va hacia atrás lo pausa y el play sigue hacia atrás; un paso de fotograma, un arrastre o un salto en la barra lo para ahí (el play sigue hacia delante); el play en el último fotograma en pausa va hacia atrás.
 - **Segmento A-B**: **I** marca el inicio y **O** el final en el fotograma actual. Al reproducir se repiten exactamente los fotogramas del inicio al final (exacto al fotograma, con `requestVideoFrameCallback`), también si el final es el último fotograma. Si marcas el final antes que el inicio, se intercambian; si mueves un extremo de un segmento ya completo más allá del otro, empieza un segmento nuevo. **U** borra el segmento. Si das al play fuera del segmento, empieza en el inicio. Los pasos de fotograma (rueda y teclas) no se limitan al segmento.
 - El segmento es de cada vídeo (por archivo) y se mantiene mientras la página esté abierta. Una línea naranja fina (3 px) en el borde superior de la imagen indica dónde está el segmento dentro del clip, así que no tapa la parte de abajo. Cada acción se confirma con un mensaje: «Inicio de bucle: frame N», «Final de bucle: frame N», «Bucle borrado».
@@ -130,7 +130,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.8.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.9.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

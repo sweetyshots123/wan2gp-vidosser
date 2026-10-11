@@ -47,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.8"
+PLUGIN_VERSION = "1.4.9"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -184,11 +184,11 @@ _TEXT = {
     "ch_jump": ("Short jump", "Salto corto"),
     "ch_speed": ("Playback speed", "Velocidad de reproducción"),
     # loop
-    "sec_loop": ("### Loop\n**L** turns the loop of the current video on or off. **I** / **O** mark the start / end of an "
+    "sec_loop": ("### Loop\n**L** turns the loop of the current video on or off (with an A-B segment: clears it and turns the loop off). **I** / **O** mark the start / end of an "
                  "A-B segment at the current frame: when playing, only that part repeats (frame accurate). **U** clears the segment. "
                  "The segment belongs to each video and is kept while the page is open. **B** turns Boomerang on or off for the current video. "
                  "The keys are changed above, in «Keys».",
-                 "### Bucle\n**L** activa o desactiva el bucle del vídeo actual. **I** / **O** marcan el inicio / final de un "
+                 "### Bucle\n**L** activa o desactiva el bucle del vídeo actual (con un segmento A-B: lo borra y desactiva el bucle). **I** / **O** marcan el inicio / final de un "
                  "segmento A-B en el fotograma actual: al reproducir, se repite solo ese tramo (exacto al fotograma). **U** borra el segmento. "
                  "El segmento es de cada vídeo y se mantiene mientras la página esté abierta. **B** activa o desactiva el Boomerang del vídeo actual. "
                  "Las teclas se cambian arriba, en «Teclas»."),

@@ -2,6 +2,13 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.9] - 2026-10-11
+### Fixed
+- **Loop couldn't be turned off after an A-B segment.** **U** cleared the segment, but with *Loop all videos* on the whole video kept looping, so it looked as if the loop was still there. Now **L** on a video with an A-B segment (complete or half) clears the segment **and** turns this video's loop off (message *Loop cleared · loop off (this video)*); **L** again turns it back on. U is unchanged (segment only). U was checked in container and native fullscreen, with Boomerang on and off.
+- The per-video state (L / B overrides, A-B segments) is now keyed by the file name instead of the full URL, so it survives the gallery serving the same file under another URL (Gradio cache / query string after a refresh). Before, an L "loop off" could silently be lost and the video looped again.
+- The element's `loop` attribute is re-asserted on play / playing / timeupdate / seeked, so nothing else can keep a loop the user turned off.
+- Boomerang: turning the loop off (L, unticking *Loop all videos*, or L with a segment) while going backwards stops the reverse at once, plays forwards to the end and stops there (like a normal non-looping video). With an A-B segment the bounce continues while the segment exists (a segment always loops); L removes it.
+
 ## [1.4.8] - 2026-10-11
 ### Added
 - **Video info panel** (`keys.toggle_info`, default `P`; Keys: *Video info* / *Información del vídeo*): toggles a panel at the top right of the picture with the file name, resolution (`videoWidth×videoHeight`), FPS (detected from the file, measured during playback, or the default when not detected), duration (time + frame count), current frame / time, playback speed (and paused), volume / muted, loop state (off / normal / Boomerang, A-B segment, going backwards) and file size (one HEAD request, shown when known; never blocks). Updated live 4× per second; stays until P again or Esc (Esc then only closes the panel). Inside the fullscreen element in container / gallery fullscreen; in native `<video>` fullscreen it is shown as the Vidosser subtitle cue (kept while the panel is on). Codec is not shown (not available cheaply in the browser). If a settings file already uses P for another action, that key wins and the info action gets a free key.

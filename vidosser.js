@@ -1702,7 +1702,17 @@
         const origLoop = new WeakMap();          // loop attribute before we touched the element
         const override = new Map();              // src -> loop forced by the toggle key
         const bOverride = new Map();             // src -> boomerang forced by the toggle_boomerang key (B)
-        const srcOf = v => v.currentSrc || v.src || "";
+        // Per-video state (L / B overrides, A-B segments) is keyed by the FILE NAME, not the full URL:
+        // WanGP's gallery can serve the same video under a different URL after a refresh (Gradio
+        // cache / temp copy / query string), which made an L "loop off" get lost (1.4.9).
+        const rawSrc = v => v.currentSrc || v.src || "";
+        const srcOf = v => {
+            const u = rawSrc(v);
+            if (!u) return "";
+            let p = u.split("#")[0].split("?")[0];
+            try { p = decodeURIComponent(p); } catch (_) { /* keep */ }
+            return p.split(/[\\/=]/).pop() || u;
+        };
 
         // Whether the video should loop (loop_all / L / its own attribute). With boomerang on, the
         // element's own `loop` attribute is kept OFF so the end of the video is seen ("ended") and
@@ -1730,10 +1740,25 @@
             }
         }).observe(document.documentElement, { childList: true, subtree: true });
         document.addEventListener("loadedmetadata", e => applyLoop(e.target), true);   // src swapped in place
+        // re-assert the element's `loop` whenever playback starts / runs (1.4.9): anything else that
+        // rewrites it (a player re-render, an element reused for another file) can't keep a loop
+        // the user turned off, or drop one that is on
+        for (const ev of ["play", "playing", "timeupdate", "seeked"]) document.addEventListener(ev, e => applyLoop(e.target), true);
         applyAll();
 
         core.registerAction("toggle_loop", v => {
             if (CFG.enabled === false) return;
+            // 1.4.9: with an A-B segment (or half of one), L turns the loop off completely: the segment
+            // is cleared and this video stops looping (Boomerang too); L again = loop on
+            if (segOf(v)) {
+                segments.delete(srcOf(v));
+                clearTimeout(timers.get(v)); timers.delete(v);
+                override.set(srcOf(v), false);
+                applyLoop(v); drawBar(v);
+                core.toast(i18n("Loop cleared", "Bucle borrado") + " · " + i18n("loop off (this video)", "bucle desactivado (este vídeo)"), "info", 1800);
+                core.showOverlay(v, i18n("Loop cleared", "Bucle borrado"));
+                return;
+            }
             const on = !loopWanted(v);
             override.set(srcOf(v), on);
             applyLoop(v);
@@ -1916,7 +1941,7 @@
         }
         function cacheOf(v, create) {
             let c = caches.get(v);
-            const src = srcOf(v);
+            const src = rawSrc(v);
             if (c && c.src !== src) { freeCache(v); c = null; }
             if (c || !create) return c || null;
             const info = core.getInfo(v), last = core.lastFrameOf(v, info);
@@ -1934,7 +1959,7 @@
             c.busy.add(f);
             createImageBitmap(v, { resizeWidth: c.w, resizeHeight: c.h, resizeQuality: "medium" }).then(bm => {
                 c.busy.delete(f);
-                if (caches.get(v) === c && c.src === srcOf(v) && !c.frames.has(f)) c.frames.set(f, bm); else bm.close();
+                if (caches.get(v) === c && c.src === rawSrc(v) && !c.frames.has(f)) c.frames.set(f, bm); else bm.close();
             }, () => c.busy.delete(f));
         }
         const capturing = new WeakSet();
@@ -2064,7 +2089,7 @@
             const f = Math.min(st.shown, Math.max(bound, raw));      // never upwards, never below the start
             const idle = !v.seeking && !core.seekPending(v) && v.readyState >= 2;
             const c = caches.get(v);
-            const cached = !!(c && c.src === srcOf(v) && c.frames.has(f)) && canvasUsable(v);
+            const cached = !!(c && c.src === rawSrc(v) && c.frames.has(f)) && canvasUsable(v);
             // 1. the picture
             if (cached) { if (f !== st.shown || !st.canvas) { draw(v, st, f); st.shown = f; } }
             else if (st.canvas && (!canvasUsable(v) || (idle && st.vf === f))) { hideCanvas(v); st.canvas = false; st.shown = st.vf; }
