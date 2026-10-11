@@ -47,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.11"
+PLUGIN_VERSION = "1.4.12"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -181,6 +181,9 @@ _TEXT = {
                           "resolución completa; con zoom, arrastrar con el botón de arrastre mueve la imagen; Shift + rueda pasa 1 "
                           "fotograma; Z o volver a 1× quita el zoom. No es posible en la pantalla completa nativa del navegador."),
     "ch_wheel_frames": ("Step frames", "Pasar fotogramas"),
+    "zoom_drag": ("Drag while zoomed", "Arrastrar con zoom"),
+    "ch_zoom_pan": ("Move the picture", "Mover la imagen"),
+    "ch_zoom_scrub": ("Step frames", "Pasar fotogramas"),
     "ch_wheel_zoom": ("Zoom", "Zoom"),
     "key_reset_zoom": ("Remove zoom", "Quitar zoom"),
     "wheel_mod_action": ("Modifier + wheel does", "El modificador + rueda hace"),
@@ -351,6 +354,7 @@ DEFAULT_SETTINGS = {
         "wheel_fullscreen_only": True,  # wheel steps only while a video (or its container) is fullscreen;
                                         # outside fullscreen the wheel scrolls the page as usual
         "wheel_jump_modifier": "ctrl",  # modifier + wheel key: "ctrl" | "alt" | "shift" | "meta" | "none"
+        "zoom_drag": "pan",         # while zoomed, a scrub-button drag: "pan" (move the picture) | "scrub" (frames, zoom kept)
         "wheel_action": "frames",   # plain wheel: "frames" (step) | "zoom" (zoom at the cursor, drag pans while zoomed)
         "wheel_mod_action": "jump", # what modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate, 0.25..2)
         "speed_remember": True,     # keep the last playbackRate for later videos (also after reload); only used when action is speed
@@ -408,6 +412,7 @@ DEFAULT_SETTINGS = {
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("frame_step", "wheel_mod_action"): ("jump", "speed"),
             ("frame_step", "wheel_action"): ("frames", "zoom"),
+            ("frame_step", "zoom_drag"): ("pan", "scrub"),
             ("loop", "mode"): ("normal", "boomerang"),
             ("save_frame", "format"): ("png", "jpg"),
             ("save_frame", "mode"): ("ask", "direct"),
@@ -424,6 +429,7 @@ _CHOICE_KEYS = {
     "jump_mode": [("ch_seconds", "seconds"), ("ch_frames", "frames")],
     "wheel_mod_action": [("ch_jump", "jump"), ("ch_speed", "speed")],
     "wheel_action": [("ch_wheel_frames", "frames"), ("ch_wheel_zoom", "zoom")],
+    "zoom_drag": [("ch_zoom_pan", "pan"), ("ch_zoom_scrub", "scrub")],
     "loop_mode": [("ch_loop_normal", "normal"), ("ch_boomerang", "boomerang")],
     "format": [("ch_png", "png"), ("ch_jpg", "jpg")],
     "mode": [("ch_ask", "ask"), ("ch_direct", "direct")],
@@ -712,6 +718,8 @@ class VidosserPlugin(WAN2GPPlugin):
                 wheel_action = loc(gr.Dropdown(label=T("wheel_action"), choices=C("wheel_action"), value=current("frame_step", "wheel_action"),
                                                elem_id="vidosser_wheel_action", info=T("wheel_action_info")),
                                    label="wheel_action", info="wheel_action_info", choices=("choices", "wheel_action"))
+                zoom_drag = loc(gr.Dropdown(label=T("zoom_drag"), choices=C("zoom_drag"), value=current("frame_step", "zoom_drag"),
+                                            elem_id="vidosser_zoom_drag"), label="zoom_drag", choices=("choices", "zoom_drag"))
                 wheel_mod_action = loc(gr.Dropdown(label=T("wheel_mod_action"), choices=C("wheel_mod_action"), value=current("frame_step", "wheel_mod_action"),
                                                    elem_id="vidosser_wheel_mod_action", info=T("wheel_mod_action_info")),
                                        label="wheel_mod_action", info="wheel_mod_action_info", choices=("choices", "wheel_mod_action"))
@@ -784,7 +792,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -819,7 +827,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action")
+                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -838,7 +846,7 @@ class VidosserPlugin(WAN2GPPlugin):
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
-                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", lang="en"):
+                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -880,6 +888,9 @@ class VidosserPlugin(WAN2GPPlugin):
         wheel_action = str(wheel_action or "frames").lower()
         if wheel_action not in _CHOICES[("frame_step", "wheel_action")]:
             errors.append(tr("msg_invalid", lang, label=tr("wheel_action", lang)))
+        zoom_drag = str(zoom_drag or "pan").lower()
+        if zoom_drag not in _CHOICES[("frame_step", "zoom_drag")]:
+            errors.append(tr("msg_invalid", lang, label=tr("zoom_drag", lang)))
         volume_button = str(volume_button or "left").lower()
         if volume_button not in _CHOICES[("volume", "drag_button")]:
             errors.append(tr("msg_invalid", lang, label=tr("volume_button", lang)))
@@ -895,7 +906,7 @@ class VidosserPlugin(WAN2GPPlugin):
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
                                       drag_invert=bool(drag_invert), drag_button=drag_button,
                                       drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock), wrap=bool(wrap),
-                                      wheel_mod_action=wheel_mod_action, wheel_action=wheel_action, speed_remember=bool(speed_remember))
+                                      wheel_mod_action=wheel_mod_action, wheel_action=wheel_action, zoom_drag=zoom_drag, speed_remember=bool(speed_remember))
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)

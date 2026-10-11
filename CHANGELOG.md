@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.12] - 2026-10-11
+### Added
+- `frame_step.zoom_drag`: `"pan"` | `"scrub"` (default `"pan"`; tab «Arrastrar con zoom»: «Mover la imagen» / «Pasar fotogramas»). With `"scrub"`, a drag with the scrub button while zoomed steps frames exactly like the normal scrub (wrap, axis lock with the volume, cursor rule) and the zoom and picture position stay.
+
 ## [1.4.11] - 2026-10-11
 ### Added
 - **Wheel zoom** (`frame_step.wheel_action`: `"frames"` | `"zoom"`, default `"frames"`; tab «La rueda hace»: «Pasar fotogramas» / «Zoom»). Zoom mode: the plain wheel zooms the video at the cursor (CSS transform, ×1.25 per notch, 1× to max(8×, ~4 screen px per video px)); forward wheel direction (as for frames, `invert_direction` flips it) = zoom in; overlay «Zoom 2.4×»; the info panel shows the zoom. While zoomed the scrub button pans (clamped so the picture always covers the video box); Shift + wheel = 1 frame; Ctrl + wheel, keys and the volume drag unchanged. Reset to 1× with **Z** (`keys.reset_zoom`, «Quitar zoom»), when zooming out to 1×, on a new video (E / R / gallery) and on leaving fullscreen. Works outside fullscreen and in the container fullscreen; not in native `<video>` fullscreen. The Boomerang reverse canvas follows the zoom (clipped to the video box). Saved frames are always the full frame.

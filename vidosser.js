@@ -1160,7 +1160,7 @@
                 const adx = Math.abs(dx), ady = Math.abs(dy);
                 if (Math.max(adx, ady) < DRAG_THRESHOLD) return;          // not decided yet: still a click
                 const Z = V.modules.zoom;
-                if (drag.scrub && !drag.modVol && Z && Z.level(drag.v) > 1) {   // 1.4.11: zoomed -> the scrub button pans
+                if (drag.scrub && !drag.modVol && Z && Z.level(drag.v) > 1 && String(CFG.zoom_drag || "pan").toLowerCase() !== "scrub") {   // 1.4.11: zoomed -> the scrub button pans
                     drag.axis = "pan"; drag.active = true; drag.px = 0; drag.py = 0;
                     capture(drag);
                 }
@@ -1311,6 +1311,7 @@
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
         wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
+        zoom_drag: "pan",             // zoomed: scrub-button drag "pan" | "scrub" (1.4.12)
         wheel_action: "frames",       // plain wheel: "frames" | "zoom" (1.4.11)
         wheel_mod_action: "jump",     // what the modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate)
         speed_remember: true,         // keep the last playbackRate for later videos (also after reload)
