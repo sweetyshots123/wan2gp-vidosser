@@ -1212,6 +1212,7 @@
             // only the click that ends the drag (on the video / its player); with pointer lock there may be none
             const block = on && (on.closest(".block") || on.parentElement || on);
             if (late || !(e.target instanceof Node) || !(e.target === on || block.contains(e.target))) return;
+            if (e.target instanceof Element && e.target.closest(".thumbnail-item")) return;   // 1.4.10: a gallery thumbnail click is never the end of a drag
             e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
         }
         const blockWhileDragging = e => { if (drag && drag.active) e.preventDefault(); };
@@ -1527,7 +1528,7 @@
 
         function enter(video) {
             const c = containerFor(video);
-            if (!c) return nativeRequest.call(video);
+            if (!c) { ownNativeAt = performance.now(); return nativeRequest.call(video); }
             if (!c.classList.contains("gallery-container")) c.classList.add(CLS);
             core.touch(video);
             return nativeRequest.call(c);
@@ -1535,7 +1536,8 @@
 
         // page-initiated requests on a <video> -> container
         const ownRequest = function (options) {
-            return enabled(this) ? enter(this) : nativeRequest.call(this, options);
+            if (enabled(this)) return enter(this);
+            ownNativeAt = performance.now(); return nativeRequest.call(this, options);
         };
         Object.defineProperty(HTMLVideoElement.prototype, "requestFullscreen", { value: ownRequest, configurable: true, writable: true });
 
@@ -1547,6 +1549,7 @@
         // double-click is restored afterwards. A "double-click" made of the release of a
         // drag-scrub and a quick click is ignored.
         let swallowDblUntil = 0, firstPress = null, restoreTimer = 0;
+        let ownNativeAt = -1e9;
         function restorePlay() {
             clearTimeout(restoreTimer);
             const p = firstPress; firstPress = null;
@@ -1574,13 +1577,44 @@
             if (performance.now() < swallowDblUntil && e.target instanceof HTMLVideoElement) {
                 e.preventDefault(); e.stopPropagation();
                 if (firstPress) setTimeout(restorePlay, 30);              // after the 2nd click's own toggle
+                return;
             }
+            // 1.4.10: the 2nd press never reached the mousedown handler (swallowed elsewhere): the
+            // double-click still goes to the container (dblclick is a user gesture too)
+            const v = e.target;
+            if (e.button !== 0 || !(v instanceof HTMLVideoElement) || core.fsElement() || !enabled(v)) return;
+            if (performance.now() - (core.dragEndedAt || 0) < 700) return;
+            e.preventDefault(); e.stopPropagation();
+            enter(v).catch(() => {});
         }, true);
         document.addEventListener("fullscreenchange", () => {
             const fs = core.fsElement();
             for (const el of document.querySelectorAll("." + CLS)) if (el !== fs) el.classList.remove(CLS);
         });
-        return { config: GEN, containerFor, enter, nativeRequest };
+
+        // 1.4.10: Chrome's own <video> fullscreen sometimes won a double-click (no gallery thumbnails,
+        // no Vidosser bars) and cannot be moved to the container afterwards (Chrome refuses a new
+        // fullscreen request without a fresh click). So Chrome's own fullscreen is turned off on the
+        // videos Vidosser takes to the container (controlsList="nofullscreen": no fullscreen button in
+        // the native bar, and no double-click fullscreen); Vidosser's double-click / Gradio's button
+        // do it on the container. Restored when container_fullscreen is turned off.
+        const NOFS = "vidosserNofs";
+        function guard() {
+            for (const v of document.querySelectorAll("video")) {
+                if (!v.controlsList) continue;
+                const want = enabled(v);
+                if (want && !v.dataset[NOFS] && !v.controlsList.contains("nofullscreen")) { v.controlsList.add("nofullscreen"); v.dataset[NOFS] = "1"; }
+                else if (!want && v.dataset[NOFS]) { v.controlsList.remove("nofullscreen"); delete v.dataset[NOFS]; }
+            }
+        }
+        let gq = false;
+        const scheduleGuard = () => { if (gq) return; gq = true; requestAnimationFrame(() => { gq = false; guard(); }); };
+        new MutationObserver(scheduleGuard).observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener("loadedmetadata", scheduleGuard, true);
+        window.addEventListener("pointerover", e => { if (e.target instanceof HTMLVideoElement) guard(); }, { capture: true, passive: true });
+        scheduleGuard();
+        const nativeOwn = function (...a) { ownNativeAt = performance.now(); return nativeRequest.apply(this, a); };
+        return { config: GEN, containerFor, enter, nativeRequest: nativeOwn, guard, onSettings: guard };
     })(core, V.config.general);
 
     // =======================================================================

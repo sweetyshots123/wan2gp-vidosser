@@ -2,6 +2,11 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.10] - 2026-10-11
+### Fixed
+- **Double-click fullscreen without gallery thumbnails / progress bars.** Chrome's own `<video>` fullscreen sometimes won the double-click over Vidosser's container fullscreen (when the second press did not reach Vidosser's handler). It can't be moved to the container afterwards (Chrome refuses a fullscreen request without a fresh click), so it is now prevented: while *container fullscreen* is on, the videos Vidosser handles get `controlsList="nofullscreen"` (no fullscreen button in Chrome's native bar, no native double-click fullscreen), and the `dblclick` event itself also enters the container fullscreen if the second press was missed. Gradio's gallery fullscreen button and Vidosser's double-click are unaffected. Turning *container fullscreen* off restores Chrome's own fullscreen.
+- A click on a gallery thumbnail right after a drag-scrub is never swallowed (the "click that ends the drag" rule covered the whole gallery block).
+
 ## [1.4.9] - 2026-10-11
 ### Fixed
 - **Loop couldn't be turned off after an A-B segment.** **U** cleared the segment, but with *Loop all videos* on the whole video kept looping, so it looked as if the loop was still there. Now **L** on a video with an A-B segment (complete or half) clears the segment **and** turns this video's loop off (message *Loop cleared · loop off (this video)*); **L** again turns it back on. U is unchanged (segment only). U was checked in container and native fullscreen, with Boomerang on and off.
