@@ -2,6 +2,12 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.16] - 2026-10-13
+### Changed
+- Edge pan no longer pauses over the thumbnail strip / gallery / buttons: it keeps going after the pointer leaves the video past an edge (clicks unaffected: only pointermove is observed, nothing prevented). Still stops on return to the inner area, at the picture's edge, zoom reset, blur, leaving the window, typing.
+### Added
+- `frame_step.zoom_edge_speed` (px/s at full depth, 200–4000, default 1400; slider «Velocidad del desplazamiento (px/s)» / "Edge pan speed (px/s)"). Missing -> 1400, out-of-range values clamped.
+
 ## [1.4.15] - 2026-10-13
 ### Changed
 - Edge pan: when the pointer leaves the video box past an edge (still in the page / fullscreen element) the picture keeps panning toward the side(s) it left at full speed (corners diagonal), until the pointer returns to the inner area, the picture reaches its edge, the zoom resets, the window loses focus / the pointer leaves the window, or the pointer is over the thumbnail strip or any interactive control (no panning there; clicks are never blocked — only pointermove is observed, on document).

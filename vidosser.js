@@ -1317,6 +1317,7 @@
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
         wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
+        zoom_edge_speed: 1400,        // edge pan px/s at full depth (1.4.16)
         zoom_edge_pan: false,         // zoomed: scroll while the pointer is near an edge (1.4.14)
         zoom_drag: "pan",             // zoomed: scrub-button drag "pan" | "scrub" (1.4.12)
         wheel_action: "frames",       // plain wheel: "frames" | "zoom" (1.4.11)
@@ -2634,7 +2635,8 @@
             if (!e || (!e.x && !e.y)) return;
             const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 0.016); lastT = now;
             const tx0 = z.tx, ty0 = z.ty;
-            pan(v, e.x * EDGE_SPEED * dt, e.y * EDGE_SPEED * dt);
+            const sp = Math.min(4000, Math.max(200, Number(FS.zoom_edge_speed) || EDGE_SPEED));
+            pan(v, e.x * sp * dt, e.y * sp * dt);
             if (z.tx === tx0 && z.ty === ty0 && dt > 0.001) return;    // picture at its edge: stop (next move re-arms)
             raf = requestAnimationFrame(tick);
         }
@@ -2649,7 +2651,7 @@
             if (!v && ptr && ptr.v.isConnected && st.has(ptr.v)) {
                 const fs = core.fsElement();
                 const el = t instanceof Element ? t : null;
-                if (el && !el.closest(INTERACTIVE) && (!fs || fs.contains(el))) v = ptr.v;
+                if (el && (!fs || fs.contains(el))) v = ptr.v;     // 1.4.16: also over thumbnails / buttons (clicks untouched)
             }
             if (!v || core.typingOrModal(e)) { ptr = null; return; }
             ptr = { v, x: e.clientX, y: e.clientY };
