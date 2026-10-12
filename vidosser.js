@@ -1076,20 +1076,25 @@
             const vm = volModifier(), modVol = !touch && !!vm && !!e[MODIFIERS[vm]];
             let scrub = scrubOn && (touch || button === dragButton()), vol = volOn && (touch || button === volButton());
             if (vol && vm && !touch && !modVol) vol = false;
-            if (vol && modVol) scrub = false;
+            // 1.4.13: zoomed + Ctrl on the scrub button swaps pan <-> scrub (frame_step.zoom_drag); with the
+            // volume on the same button + drag_require_ctrl: axis lock, vertical = volume, horizontal = the swap
+            const ZM = V.modules.zoom, t0 = e.target;
+            const zctrl = !touch && e.ctrlKey && scrubOn && button === dragButton() && !!ZM && t0 instanceof HTMLVideoElement && ZM.level(t0) > 1;
+            if (zctrl) scrub = true;
+            if (vol && modVol && !zctrl) scrub = false;
             if (!scrub && !vol) return;
-            const volOnly = vol && (modVol || (!scrub && !same));            // volume only: any direction starts it
+            const volOnly = vol && ((modVol && !zctrl) || (!scrub && !same));            // volume only: any direction starts it
             const v = e.target;
             if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
             const jm = jumpModifier();
             const ok = m => (modVol && vol && vm === m) || jm === m;
-            if ((e.altKey && !ok("alt")) || (e.metaKey && !ok("meta")) || (e.ctrlKey && !ok("ctrl"))) return;
+            if ((e.altKey && !ok("alt")) || (e.metaKey && !ok("meta")) || (e.ctrlKey && !ok("ctrl") && !zctrl)) return;
             if (v.controls) {                                            // native control bar / progress bar
                 const r = v.getBoundingClientRect();
                 if (e.clientY > r.bottom - CONTROLS_PX) return;
             }
             drag = { v, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, lock: null, active: false, done: 0, type: e.pointerType, button,
-                     scrub, vol, volOnly, modVol: modVol && vol, split: !same && volOn, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
+                     scrub, vol, volOnly, modVol: modVol && vol, zctrl, split: !same && volOn, axis: null, prevDy: 0, level: 0, lockMoves: 0 };
         }
         // Hidden cursor while scrubbing (drag_hide_cursor): class on <html> (covers every
         // element, also inside a fullscreen container), on the capturing video and on the
@@ -1160,7 +1165,8 @@
                 const adx = Math.abs(dx), ady = Math.abs(dy);
                 if (Math.max(adx, ady) < DRAG_THRESHOLD) return;          // not decided yet: still a click
                 const Z = V.modules.zoom;
-                if (drag.scrub && !drag.modVol && Z && Z.level(drag.v) > 1 && String(CFG.zoom_drag || "pan").toLowerCase() !== "scrub") {   // 1.4.11: zoomed -> the scrub button pans
+                const wantPan = (String(CFG.zoom_drag || "pan").toLowerCase() !== "scrub") !== !!drag.zctrl;   // Ctrl swaps
+                if (drag.scrub && Z && Z.level(drag.v) > 1 && wantPan && (drag.zctrl || !drag.modVol) && !(drag.modVol && ady > adx)) {   // 1.4.11: zoomed -> the scrub button pans
                     drag.axis = "pan"; drag.active = true; drag.px = 0; drag.py = 0;
                     capture(drag);
                 }
@@ -1208,7 +1214,7 @@
             const n = want - drag.done;
             if (!n) return;
             drag.done = want;
-            const u = dragUnit(e);
+            const u = drag.zctrl ? { frames: 1, jumps: 0 } : dragUnit(e);   // Ctrl swap to scrub: plain frames
             queueSteps(drag.v, n * u.frames, n * u.jumps);
         }
         function endDrag(reason, swallow = true) {

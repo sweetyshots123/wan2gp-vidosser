@@ -2,6 +2,11 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.13] - 2026-10-12
+### Added
+- While zoomed, **Ctrl + drag** with the scrub button does the other `zoom_drag` action: pan in «Pasar fotogramas» mode, frame scrub (1 frame per step) in «Mover la imagen» mode. If the volume drag uses the same button with «Mantener Control pulsado», Ctrl + drag uses the axis lock: vertical = volume, horizontal = pan / frames. Ctrl + click without moving still plays / pauses.
+- **Overlapping mouse + modifier combinations** are detected when the tab is saved (and reported in the console at start-up): Ctrl + drag on the scrub button = volume and zoom drag (volume on the same button + «Mantener Control» + zoom); Shift + wheel = 1 frame in zoom mode and the wheel modifier when it is Shift; a drag while zoomed = pan and volume (volume on the same button without Ctrl, «Mover la imagen»); Ctrl + drag while zoomed = swap vs short-jump scrub with the Ctrl wheel modifier (note only). A save that would CREATE one of the first three keeps the already saved values of the settings involved (the new conflicting change is not applied, the warning names both); other changes are saved. Overlaps already saved are only reported (⚠️).
+
 ## [1.4.12] - 2026-10-11
 ### Added
 - `frame_step.zoom_drag`: `"pan"` | `"scrub"` (default `"pan"`; tab «Arrastrar con zoom»: «Mover la imagen» / «Pasar fotogramas»). With `"scrub"`, a drag with the scrub button while zoomed steps frames exactly like the normal scrub (wrap, axis lock with the volume, cursor rule) and the zoom and picture position stay.

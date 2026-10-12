@@ -47,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.12"
+PLUGIN_VERSION = "1.4.13"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -186,6 +186,22 @@ _TEXT = {
     "ch_zoom_scrub": ("Step frames", "Pasar fotogramas"),
     "ch_wheel_zoom": ("Zoom", "Zoom"),
     "key_reset_zoom": ("Remove zoom", "Quitar zoom"),
+    "btn_left": ("left", "izquierdo"),
+    "btn_right": ("right", "derecho"),
+    "ov_ctrl_vol_zoom": ("Ctrl + drag with the {btn} button does two things while zoomed: change the volume («Hold Ctrl to drag the volume», same button as «Drag button») "
+                         "and move the picture / step frames («Drag while zoomed»). The direction decides: vertical = volume, horizontal = picture / frames.",
+                         "Control + arrastrar con el botón {btn} hace dos cosas con zoom: cambiar el volumen («Mantener Control pulsado para arrastrar el volumen», mismo botón que «Botón de arrastre») "
+                         "y mover la imagen / pasar fotogramas («Arrastrar con zoom»). Gana la dirección: vertical = volumen, horizontal = imagen / fotogramas."),
+    "ov_shift_wheel_zoom": ("Shift + wheel does two things: 1 frame («Wheel does: Zoom») and the modifier action («Wheel modifier: Shift»). The modifier wins.",
+                            "Shift + rueda hace dos cosas: 1 fotograma («La rueda hace: Zoom») y la acción del modificador («Tecla modificadora de la rueda: Shift»). Gana el modificador."),
+    "ov_same_btn_pan": ("Dragging with the {btn} button while zoomed does two things: move the picture («Drag while zoomed: Move the picture») and change the volume "
+                        "(volume drag on the same button). Moving the picture wins: no volume drag while zoomed.",
+                        "Arrastrar con el botón {btn} con zoom hace dos cosas: mover la imagen («Arrastrar con zoom: Mover la imagen») y cambiar el volumen "
+                        "(arrastre de volumen en el mismo botón). Gana mover la imagen: sin volumen por arrastre mientras hay zoom."),
+    "ov_ctrl_jump_zoom": ("While zoomed, Ctrl + drag swaps «Drag while zoomed» (picture / frames) instead of scrubbing in short jumps («Wheel modifier: Ctrl»). The swap wins (only while zoomed).",
+                          "Con zoom, Control + arrastrar alterna «Arrastrar con zoom» (imagen / fotogramas) en lugar de arrastrar a saltos cortos («Tecla modificadora de la rueda: Control»). Gana el cambio (solo con zoom)."),
+    "ov_reverted": ("Not applied: {new}. It overlaps what is already saved. {why}",
+                    "No se ha aplicado: {new}. Se solapa con lo ya guardado. {why}"),
     "wheel_mod_action": ("Modifier + wheel does", "El modificador + rueda hace"),
     "wheel_mod_action_info": ("«Short jump»: one notch = one short jump (same as W / Q). «Playback speed»: each notch changes the "
                               "playback speed by 0.25× between 0.25× and 2.00×. The wheel direction that steps frames forward also "
@@ -480,6 +496,57 @@ def _coerce(section, key, default, value):
     return default
 
 
+# ---- overlapping mouse + modifier combinations (1.4.13)
+# (id, condition, fields involved, blocking): blocking overlaps introduced by a save are refused
+# (the saved values stay); pre-existing ones and non-blocking ones are only reported.
+def _ov_same(s):
+    return bool(s["frame_step"]["drag_scrub"]) and bool(s["volume"]["drag_volume"]) and s["volume"]["drag_button"] == s["frame_step"]["drag_button"]
+_OVERLAPS = (
+    ("ov_ctrl_vol_zoom", lambda s: _ov_same(s) and s["volume"]["drag_require_ctrl"] and s["frame_step"]["wheel_action"] == "zoom",
+     (("volume", "drag_button"), ("frame_step", "drag_button"), ("volume", "drag_require_ctrl"), ("frame_step", "wheel_action"),
+      ("volume", "drag_volume"), ("frame_step", "drag_scrub")), True),
+    ("ov_shift_wheel_zoom", lambda s: s["frame_step"]["wheel_action"] == "zoom" and s["frame_step"]["wheel_jump_modifier"] == "shift",
+     (("frame_step", "wheel_action"), ("frame_step", "wheel_jump_modifier")), True),
+    ("ov_same_btn_pan", lambda s: _ov_same(s) and not s["volume"]["drag_require_ctrl"] and s["frame_step"]["wheel_action"] == "zoom"
+                                  and s["frame_step"]["zoom_drag"] == "pan",
+     (("volume", "drag_button"), ("frame_step", "drag_button"), ("volume", "drag_require_ctrl"), ("frame_step", "wheel_action"),
+      ("frame_step", "zoom_drag"), ("volume", "drag_volume"), ("frame_step", "drag_scrub")), True),
+    ("ov_ctrl_jump_zoom", lambda s: s["frame_step"]["wheel_action"] == "zoom" and s["frame_step"]["wheel_jump_modifier"] == "ctrl"
+                                    and bool(s["frame_step"]["drag_scrub"]),
+     (("frame_step", "wheel_action"), ("frame_step", "wheel_jump_modifier")), False),
+)
+
+
+def overlap_messages(settings, lang="en"):
+    btn = tr("btn_" + ("right" if settings["frame_step"]["drag_button"] == "right" else "left"), lang)
+    return [tr(oid, lang, btn=btn) for oid, cond, _f, _b in _OVERLAPS if cond(settings)]
+
+
+def resolve_overlaps(new, old, lang="en"):
+    """Refuse the changes that create a NEW blocking overlap (the saved values stay); report the rest.
+    Returns the list of warnings; `new` is modified in place."""
+    notes = []
+    for _round in range(len(_OVERLAPS)):
+        changed_any = False
+        for oid, cond, fields, blocking in _OVERLAPS:
+            if not blocking or not cond(new) or cond(old):
+                continue
+            changed = [(sec, k) for sec, k in fields if new[sec][k] != old[sec][k]]
+            if not changed:
+                continue
+            btn = tr("btn_" + ("right" if new["frame_step"]["drag_button"] == "right" else "left"), lang)
+            why = tr(oid, lang, btn=btn)
+            names = ", ".join(f"{sec}.{k} = {json.dumps(new[sec][k])}" for sec, k in changed)
+            for sec, k in changed:
+                new[sec][k] = old[sec][k]
+            notes.append(tr("ov_reverted", lang, new=names, why=why))
+            changed_any = True
+        if not changed_any:
+            break
+    notes += overlap_messages(new, lang)
+    return notes
+
+
 def load_settings(path=None):
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     path = path or SETTINGS_PATH
@@ -579,6 +646,8 @@ def validate_keys(keys, lang="en"):
 
 def build_js(settings=None):
     settings = settings or load_settings()
+    for msg in overlap_messages(settings, "en"):                 # 1.4.13: overlapping mouse + modifier combinations
+        print(f"[Vidosser] ⚠️ {msg}")
     with open(os.path.join(_PLUGIN_DIR, "vidosser.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
     # The snippet is appended inside WanGP's main JS function body; it is wrapped
@@ -899,6 +968,7 @@ class VidosserPlugin(WAN2GPPlugin):
             errors.append(tr("msg_invalid", lang, label=tr("loop_mode", lang)))
         if errors:
             return tr("msg_not_saved", lang, time=time.strftime('%H:%M:%S')) + "\n\n- " + "\n- ".join(errors), gr.update()
+        saved = copy.deepcopy(settings)
         settings["keys"].update(keys, enabled=bool(keys_enabled))
         notes = []
         if jump_modifier == "shift":
@@ -920,6 +990,7 @@ class VidosserPlugin(WAN2GPPlugin):
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
                                   drag_button=volume_button, drag_require_ctrl=bool(volume_ctrl), remember=bool(volume_remember))
         settings["new_video"].update(no_autojump_fullscreen=bool(no_autojump), jump_on_fullscreen_exit=bool(jump_on_exit), notify=bool(new_notify))
+        notes += resolve_overlaps(settings, saved, lang)
         try:
             save_settings(settings)
         except Exception as e:
