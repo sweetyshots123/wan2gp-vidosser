@@ -2618,9 +2618,9 @@
         }
         function edgeVec(v, x, y) {
             const b = box(v);
-            if (x < b.L || x > b.R || y < b.T || y > b.B) return null;
+            // 1.4.15: outside the box (past an edge) the depth saturates -> full speed toward the side(s) left
             const bx = Math.max(40, b.w * 0.12), by = Math.max(40, b.h * 0.12);
-            const f = (d, band) => d < band ? (band - d) / band : 0;
+            const f = (d, band) => d < band ? Math.min(1, (band - d) / band) : 0;
             return { x: f(x - b.L, bx) - f(b.R - x, bx), y: f(y - b.T, by) - f(b.B - y, by) };   // +1 = toward left / top
         }
         function tick(now) {
@@ -2635,19 +2635,27 @@
             const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 0.016); lastT = now;
             const tx0 = z.tx, ty0 = z.ty;
             pan(v, e.x * EDGE_SPEED * dt, e.y * EDGE_SPEED * dt);
-            if (z.tx === tx0 && z.ty === ty0 && lastT) { /* at the limit: keep watching (pointer may move) */ }
+            if (z.tx === tx0 && z.ty === ty0 && dt > 0.001) return;    // picture at its edge: stop (next move re-arms)
             raf = requestAnimationFrame(tick);
         }
-        window.addEventListener("pointermove", e => {
+        // 1.4.15: once started over a zoomed video, panning continues while the pointer is outside the box
+        // (anywhere in the page / fullscreen element), except over thumbnails or interactive controls, so
+        // clicks there stay usable (we never block clicks: only pointermove is observed).
+        const INTERACTIVE = "button, a, input, select, textarea, label, [role=button], [role=tab], [role=slider], [contenteditable], .thumbnail-item, .thumbnails";
+        document.addEventListener("pointermove", e => {
             if (FS.zoom_edge_pan !== true || e.pointerType === "touch") { ptr = null; return; }
             const t = e.target;
-            let v = t instanceof HTMLVideoElement ? t : null;
-            if (!v) for (const cand of st.keys()) { const b = box(cand); if (e.clientX >= b.L && e.clientX <= b.R && e.clientY >= b.T && e.clientY <= b.B && document.elementFromPoint(e.clientX, e.clientY) === cand) v = cand; }
-            if (!v || !st.has(v) || core.typingOrModal(e)) { ptr = null; return; }
+            let v = t instanceof HTMLVideoElement && st.has(t) ? t : null;
+            if (!v && ptr && ptr.v.isConnected && st.has(ptr.v)) {
+                const fs = core.fsElement();
+                const el = t instanceof Element ? t : null;
+                if (el && !el.closest(INTERACTIVE) && (!fs || fs.contains(el))) v = ptr.v;
+            }
+            if (!v || core.typingOrModal(e)) { ptr = null; return; }
             ptr = { v, x: e.clientX, y: e.clientY };
             if (!raf) { lastT = 0; raf = requestAnimationFrame(tick); }
         }, { capture: true, passive: true });
-        document.addEventListener("pointerleave", () => { ptr = null; });
+        document.addEventListener("mouseout", e => { if (!e.relatedTarget) ptr = null; });   // left the window
         window.addEventListener("blur", () => { ptr = null; });
         return { level, possible, wheel, pan, reset, resetAll, clipRect };
     })(core, V.config.frame_step);

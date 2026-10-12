@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.15] - 2026-10-13
+### Changed
+- Edge pan: when the pointer leaves the video box past an edge (still in the page / fullscreen element) the picture keeps panning toward the side(s) it left at full speed (corners diagonal), until the pointer returns to the inner area, the picture reaches its edge, the zoom resets, the window loses focus / the pointer leaves the window, or the pointer is over the thumbnail strip or any interactive control (no panning there; clicks are never blocked — only pointermove is observed, on document).
+
 ## [1.4.14] - 2026-10-12
 ### Added
 - `frame_step.zoom_edge_pan` (bool, default false; «Mover el encuadre al acercar el ratón al borde»): while zoomed, the pointer in the edge band of the video box (12 %, min 40 px) scrolls the picture toward that side (rAF, speed proportional to the depth into the band, diagonal in corners, clamped). Stops when the pointer leaves the band or the video, when typing, or when the zoom resets. Only over the video box (thumbnails untouched); drag pan / Ctrl swap unchanged.

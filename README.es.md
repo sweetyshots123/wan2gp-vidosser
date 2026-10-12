@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.14
+*[English](README.md)* · Licencia MIT · versión 1.4.15
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -87,7 +87,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 ## Información del vídeo (`P`)
 
 - **E** / **R** pasan al vídeo anterior / siguiente de la galería (también en pantalla completa, que se mantiene; en los extremos: «Primer vídeo» / «Último vídeo»). Configurables como «Vídeo anterior» / «Vídeo siguiente».
-- **Zoom con la rueda** (ajuste «La rueda hace»: «Pasar fotogramas» / «Zoom», por defecto pasar fotogramas): en modo zoom la rueda sola amplía el vídeo en el puntero (×1,25 por muesca, de 1× hasta 8× o más, lo necesario para unos 4 píxeles de pantalla por píxel de vídeo); el sentido de la rueda que avanza fotogramas amplía («Invertir sentido de la rueda» lo invierte). Con zoom, arrastrar con el botón de arrastre mueve la imagen (siempre cubre el recuadro del vídeo), o pasa fotogramas como un arrastre normal con «Arrastrar con zoom: Pasar fotogramas» (el zoom se mantiene); con **Control** pulsado el arrastre hace la otra opción (imagen ↔ fotogramas; si el volumen usa el mismo botón con «Mantener Control», gana la dirección: vertical = volumen, horizontal = imagen / fotogramas); Control+clic sin mover sigue reproduciendo / pausando; con «Mover el encuadre al acercar el ratón al borde» (desactivado por defecto) la imagen se desplaza mientras el puntero está en el 12 % exterior del recuadro del vídeo (mín. 40 px), más rápido cuanto más cerca del borde, en diagonal en las esquinas; Shift + rueda pasa 1 fotograma; Ctrl + rueda y las teclas de fotogramas funcionan igual; el arrastre de volumen no cambia. **Z** («Quitar zoom») vuelve a 1×, igual que alejar hasta 1×, cambiar de vídeo (E / R / galería) y salir de pantalla completa. «Rueda solo en pantalla completa» también se aplica. No es posible en la pantalla completa nativa del navegador. Guardar fotograma guarda siempre el fotograma completo.
+- **Zoom con la rueda** (ajuste «La rueda hace»: «Pasar fotogramas» / «Zoom», por defecto pasar fotogramas): en modo zoom la rueda sola amplía el vídeo en el puntero (×1,25 por muesca, de 1× hasta 8× o más, lo necesario para unos 4 píxeles de pantalla por píxel de vídeo); el sentido de la rueda que avanza fotogramas amplía («Invertir sentido de la rueda» lo invierte). Con zoom, arrastrar con el botón de arrastre mueve la imagen (siempre cubre el recuadro del vídeo), o pasa fotogramas como un arrastre normal con «Arrastrar con zoom: Pasar fotogramas» (el zoom se mantiene); con **Control** pulsado el arrastre hace la otra opción (imagen ↔ fotogramas; si el volumen usa el mismo botón con «Mantener Control», gana la dirección: vertical = volumen, horizontal = imagen / fotogramas); Control+clic sin mover sigue reproduciendo / pausando; con «Mover el encuadre al acercar el ratón al borde» (desactivado por defecto) la imagen se desplaza mientras el puntero está en el 12 % exterior del recuadro del vídeo (mín. 40 px), más rápido cuanto más cerca del borde, en diagonal en las esquinas; fuera del vídeo, pasado el borde (no sobre miniaturas ni controles), sigue a máxima velocidad; Shift + rueda pasa 1 fotograma; Ctrl + rueda y las teclas de fotogramas funcionan igual; el arrastre de volumen no cambia. **Z** («Quitar zoom») vuelve a 1×, igual que alejar hasta 1×, cambiar de vídeo (E / R / galería) y salir de pantalla completa. «Rueda solo en pantalla completa» también se aplica. No es posible en la pantalla completa nativa del navegador. Guardar fotograma guarda siempre el fotograma completo.
 - **P** muestra un panel arriba a la derecha del vídeo con: nombre del archivo, resolución, FPS (detectados, medidos o *por defecto* si no se pudieron detectar), duración (tiempo y número de fotogramas), fotograma y tiempo actuales, velocidad, volumen / silencio, estado del bucle (no / normal / Boomerang, segmento A-B) y tamaño del archivo (si el servidor lo indica). Se actualiza en directo y se queda hasta que pulsas **P** otra vez o **Esc**. Funciona dentro y fuera de la pantalla completa; en la pantalla completa nativa del vídeo se muestra como un bloque de subtítulos.
 
 ## Bucle (`loop`)
@@ -132,7 +132,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.14.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.15.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 
