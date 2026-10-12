@@ -2,6 +2,12 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.14] - 2026-10-12
+### Added
+- `frame_step.zoom_edge_pan` (bool, default false; «Mover el encuadre al acercar el ratón al borde»): while zoomed, the pointer in the edge band of the video box (12 %, min 40 px) scrolls the picture toward that side (rAF, speed proportional to the depth into the band, diagonal in corners, clamped). Stops when the pointer leaves the band or the video, when typing, or when the zoom resets. Only over the video box (thumbnails untouched); drag pan / Ctrl swap unchanged.
+### Fixed
+- Boomerang with an A-B segment: under load the frame after B (out + 1) could flash at the turn-round (the turn-round timer pauses instead of freezing with a seek, so a late timer showed the next frame). It now turns round 0.7 frame before B ends (B already on screen).
+
 ## [1.4.13] - 2026-10-12
 ### Added
 - While zoomed, **Ctrl + drag** with the scrub button does the other `zoom_drag` action: pan in «Pasar fotogramas» mode, frame scrub (1 frame per step) in «Mover la imagen» mode. If the volume drag uses the same button with «Mantener Control pulsado», Ctrl + drag uses the axis lock: vertical = volume, horizontal = pan / frames. Ctrl + click without moving still plays / pauses.

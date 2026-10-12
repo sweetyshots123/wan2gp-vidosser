@@ -1317,6 +1317,7 @@
         wheel_enabled: true,
         wheel_fullscreen_only: true,  // wheel steps only while a video (or its container) is fullscreen
         wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
+        zoom_edge_pan: false,         // zoomed: scroll while the pointer is near an edge (1.4.14)
         zoom_drag: "pan",             // zoomed: scrub-button drag "pan" | "scrub" (1.4.12)
         wheel_action: "frames",       // plain wheel: "frames" | "zoom" (1.4.11)
         wheel_mod_action: "jump",     // what the modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate)
@@ -1908,7 +1909,9 @@
             if (f > s.out || f < s.in) { seekIn(v, s, fps); return; }
             const rate = v.playbackRate || 1, fd = 1000 / fps / rate;
             const outEnds = (displayAt || performance.now()) + ((s.out + 1) / fps - mediaTime) * 1000 / rate;
-            const margin = Math.min(0.45 * fd, 28);
+            // Boomerang pauses (no freezing seek): a late timer under load let `out + 1` flash. Turn round
+            // 0.7 frame before `out` ends (`out` is already on screen); startReverse shows `out` exactly.
+            const margin = boomerangOn(v) ? 0.7 * fd : Math.min(0.45 * fd, 28);
             clearTimeout(timers.get(v));
             timers.set(v, setTimeout(() => {
                 timers.delete(v);
@@ -2602,6 +2605,50 @@
         });
         window.addEventListener("resize", () => { for (const [v, z] of st) apply(v, z); });
         core.registerAction("reset_zoom", v => reset(v, false));
+
+        // 1.4.14 edge pan (frame_step.zoom_edge_pan): while zoomed, the pointer inside an edge band of
+        // the video box (12 %, min 40 px) scrolls the picture toward that side, speed proportional to
+        // the depth into the band (corners: diagonal); clamped by apply(). Only over the video box.
+        let ptr = null, raf = 0, lastT = 0;
+        const EDGE_SPEED = 1400;                                       // px / s at the very edge
+        function box(v) {                                              // untransformed video box on screen
+            const z = st.get(v), r = v.getBoundingClientRect();
+            const L = r.left - (z ? z.tx : 0), T = r.top - (z ? z.ty : 0);
+            return { L, T, R: L + v.offsetWidth, B: T + v.offsetHeight, w: v.offsetWidth, h: v.offsetHeight };
+        }
+        function edgeVec(v, x, y) {
+            const b = box(v);
+            if (x < b.L || x > b.R || y < b.T || y > b.B) return null;
+            const bx = Math.max(40, b.w * 0.12), by = Math.max(40, b.h * 0.12);
+            const f = (d, band) => d < band ? (band - d) / band : 0;
+            return { x: f(x - b.L, bx) - f(b.R - x, bx), y: f(y - b.T, by) - f(b.B - y, by) };   // +1 = toward left / top
+        }
+        function tick(now) {
+            raf = 0;
+            if (FS.zoom_edge_pan !== true || !ptr) return;
+            const v = ptr.v, z = st.get(v);
+            if (!z || !v.isConnected || document.hidden) return;
+            const fs = core.fsElement();
+            if (fs && !(fs === v || fs.contains(v))) return;
+            const e = edgeVec(v, ptr.x, ptr.y);
+            if (!e || (!e.x && !e.y)) return;
+            const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 0.016); lastT = now;
+            const tx0 = z.tx, ty0 = z.ty;
+            pan(v, e.x * EDGE_SPEED * dt, e.y * EDGE_SPEED * dt);
+            if (z.tx === tx0 && z.ty === ty0 && lastT) { /* at the limit: keep watching (pointer may move) */ }
+            raf = requestAnimationFrame(tick);
+        }
+        window.addEventListener("pointermove", e => {
+            if (FS.zoom_edge_pan !== true || e.pointerType === "touch") { ptr = null; return; }
+            const t = e.target;
+            let v = t instanceof HTMLVideoElement ? t : null;
+            if (!v) for (const cand of st.keys()) { const b = box(cand); if (e.clientX >= b.L && e.clientX <= b.R && e.clientY >= b.T && e.clientY <= b.B && document.elementFromPoint(e.clientX, e.clientY) === cand) v = cand; }
+            if (!v || !st.has(v) || core.typingOrModal(e)) { ptr = null; return; }
+            ptr = { v, x: e.clientX, y: e.clientY };
+            if (!raf) { lastT = 0; raf = requestAnimationFrame(tick); }
+        }, { capture: true, passive: true });
+        document.addEventListener("pointerleave", () => { ptr = null; });
+        window.addEventListener("blur", () => { ptr = null; });
         return { level, possible, wheel, pan, reset, resetAll, clipRect };
     })(core, V.config.frame_step);
 
