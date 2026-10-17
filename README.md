@@ -1,6 +1,6 @@
 # Vidosser — video viewing tools for Wan2GP
 
-*[Español](README.es.md)* · MIT License · v1.4.17
+*[Español](README.es.md)* · MIT License · v1.4.18
 
 **Vidosser** is a plugin for [Wan2GP / WanGP](https://github.com/deepbeepmeep/Wan2GP) that adds precise video viewing tools to the WanGP web UI. It currently does frame-by-frame stepping and short jumps with the mouse wheel, by dragging on the video or with the keyboard, saves the exact frame on screen as PNG/JPG at full resolution (with clear on-screen and sound feedback), loops whole videos or a frame-accurate A-B segment, changes the volume by dragging vertically on the video, and keeps the video you are watching in fullscreen when WanGP finishes a new one. More tools will be added over time.
 
@@ -58,6 +58,10 @@ It is a regular WanGP plugin, so it doesn't modify any core WanGP file and survi
 - *Hide the video control bar*: *No*, *Only in fullscreen* (default) or *Always*. Hidden bars are the browser's own `<video>` controls (also in native fullscreen) and WanGP's video player bar in fullscreen; they come back when you leave fullscreen or switch the option off.
 - Without the bar: **click** the video or press **Space** to play/pause, and the **whole picture** can be dragged to scrub (no 40 px exclusion).
 - *Thin progress bar* (`show_thin_progress`, on by default): a 3 px, non-clickable line at the very bottom of the picture shows the position while the controls are hidden.
+
+**Gallery thumbnails** (1.4.18)
+- The current video's thumbnail is highlighted (white 3 px outline, accent glow, slightly larger) in the strip under the player and in the full grid shown after closing the preview (Esc / ✕), in and out of fullscreen; it follows clicks, E / R, ◀ ▶ and new videos.
+- Gradio 5.29 centres the strip inside a scroll box with a hidden scrollbar, so with many videos the oldest ones were cut off on the left and could not be reached. Vidosser keeps it centred while it fits and left-aligned / scrollable when it overflows; the mouse wheel over the strip scrolls it sideways (only when it overflows; otherwise the wheel does what it did), the current thumbnail is kept in view, and small ◀ ▶ buttons at its ends go to the previous / next video (like E / R, also in fullscreen). Thumbnail clicks work as before. Esc (or ✕) closes the preview and shows the grid of all videos.
 
 **GIF export** (`X`, `keys.export_gif`, 1.4.17)
 - With an A-B loop set (I / O), **X** saves it as an animated GIF (also in fullscreen): exact frames A..B, encoded on the WanGP computer with ffmpeg (palette + dithering), infinite loop. With Boomerang on, the GIF ping-pongs A..B..A+1 without repeating the end frames. Without a complete loop: *Mark a loop with I and O first* (nothing exported). A progress message shows the elapsed seconds, then *GIF saved: <path>* and a *⬇ Download GIF* link for 20 s (not in native video fullscreen).
@@ -210,7 +214,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 Then enable **Vidosser** in the Plugins tab and restart WanGP.
 
 **C. From the release zip**
-Download `wan2gp-vidosser-1.4.17.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
+Download `wan2gp-vidosser-1.4.18.zip` from [Releases](https://github.com/sweetyshots123/wan2gp-vidosser/releases) and extract it into `Wan2GP/plugins/`, so that you get `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Then enable it in the Plugins tab and restart WanGP.
 
 Keep the folder name `wan2gp-vidosser`. Wan2GP's `.gitignore` ignores `plugins/wan2gp-*`, so updating Wan2GP with `git pull` never touches the plugin.
 
@@ -261,12 +265,13 @@ Plugins tab → **Uninstall** next to Vidosser (or disable it and delete `Wan2GP
 - **The control bar disappeared:** with *Hide the video control bar* = *Only in fullscreen* (default) it is hidden in fullscreen only; click or Space plays/pauses. Choose *No* to always show it.
 - **No sound on save:** check *Camera sound when saving* and the volume; browsers only play sound after you have interacted with the page (a key press or click is enough).
 - **Wheel scrolls the page instead of stepping:** this is the default outside fullscreen. Go fullscreen, or turn off *Wheel only in fullscreen* in the Vidosser tab.
-- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.17 loaded`.
+- **Plugin not active after installing:** enable it in the Plugins tab, restart WanGP, and reload the page. The browser console should show `[Vidosser] v1.4.18 loaded`.
 - **"Save failed: video outside WanGP's folders"** (Spanish: *"Error al guardar: vídeo fuera de las carpetas de WanGP"*): the video is outside WanGP's folders (see Compatibility).
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+- **1.4.18**: the current video's gallery thumbnail is clearly highlighted (strip and grid); the strip is reachable when it overflows (wheel scroll, ◀ ▶ buttons).
 - **1.4.17**: export the A-B loop to a GIF (key X; ping-pong in Boomerang mode); new GIF settings section.
 - **1.4.16**: edge pan also continues over the thumbnails / buttons (clicks unaffected); new *Edge pan speed (px/s)* slider (200–4000, default 1400).
 - **1.4.15**: edge pan keeps moving at full speed when the pointer leaves the video past an edge (stops over thumbnails / controls, at the picture's edge, on blur or zoom reset).

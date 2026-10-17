@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.17
+*[English](README.md)* · Licencia MIT · versión 1.4.18
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -84,6 +84,10 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 - Sin barra: **clic** sobre el vídeo o **Espacio** = reproducir / pausar, y se puede arrastrar sobre **toda la imagen** para pasar fotogramas (sin la zona de 40 px).
 - «Barra de progreso fina (3 px)» (`show_thin_progress`, activada por defecto): una línea de 3 px, que no se puede pulsar, en el borde inferior de la imagen indica la posición mientras los controles están ocultos.
 
+## Miniaturas de la galería (1.4.18)
+
+La miniatura del vídeo actual se resalta (borde blanco de 3 px, halo de color, algo más grande) en la tira bajo el reproductor y en la cuadrícula completa que aparece al cerrar la vista previa (Esc / ✕), dentro y fuera de pantalla completa; sigue a los clics, E / R, ◀ ▶ y los vídeos nuevos. Gradio 5.29 centra la tira dentro de una caja con barra de desplazamiento oculta, así que con muchos vídeos los más antiguos quedaban cortados a la izquierda y no se podían alcanzar: ahora se centra mientras cabe y se alinea a la izquierda (desplazable) cuando no; la rueda del ratón sobre la tira la desplaza de lado (solo si no cabe), la miniatura actual se mantiene visible y unos botones ◀ ▶ en sus extremos van al vídeo anterior / siguiente (como E / R, también a pantalla completa). Los clics en miniaturas funcionan igual.
+
 ## Exportar el bucle a GIF (`X`, `keys.export_gif`)
 
 Con un bucle A-B marcado (I / O), **X** lo guarda como GIF animado (también a pantalla completa): fotogramas exactos de A a B, codificado en el equipo de WanGP con ffmpeg (paleta + tramado), en bucle infinito. Con Boomerang activado el GIF va y vuelve (A..B..A+1, sin repetir los extremos). Sin bucle completo: «Primero marca un bucle con I y O» (no se exporta nada). Mientras exporta se ve el tiempo transcurrido; al terminar, «GIF guardado: <ruta>» y un enlace «⬇ Descargar GIF» durante 20 s (no en la pantalla completa nativa del vídeo).
@@ -138,7 +142,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.17.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.18.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

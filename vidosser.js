@@ -977,6 +977,9 @@
 
         function onWheel(e) {
             if (CFG.enabled === false || !CFG.wheel_enabled) return;
+            // 1.4.18: over a scrollable gallery thumbnail strip the wheel scrolls the strip (module strip)
+            { const st = e.target instanceof Element && e.target.closest(".gallery-container .preview .thumbnails");
+              if (st && st.scrollWidth > st.clientWidth + 1) return; }
             // wheel_fullscreen_only: outside fullscreen the wheel is left completely alone (page scroll / zoom)
             if (CFG.wheel_fullscreen_only && !core.fsElement()) return;
             const jm = jumpModifier();
@@ -2469,6 +2472,7 @@
             const n = all.indexOf(t) + 1;
             setTimeout(() => core.showOverlay(v, `${dir < 0 ? i18n("Previous video", "Vídeo anterior") : i18n("Next video", "Vídeo siguiente")} · ${n}/${all.length}`), 150);
         }
+        V.stepVideo = step;
         core.registerAction("prev_video", v => step(v, -1));
         core.registerAction("next_video", v => step(v, 1));
         function onFullscreenChange() {
@@ -2487,6 +2491,110 @@
         jump_on_fullscreen_exit: true,  // on leaving fullscreen, show the newest video (what WanGP would have done)
         notify: true,                   // "Nuevo vídeo listo" message (not possible in native <video> fullscreen)
     }, SETTINGS.new_video || {}));
+
+    // =======================================================================
+    // MODULE strip (1.4.18) - gallery thumbnails: the selected / current video is clearly highlighted
+    // (3 px white outline + accent glow, slightly larger) in the preview strip and in the full grid
+    // (Esc / close of the preview), in and out of container fullscreen. Gradio 5.29 keeps the class
+    // "selected" in sync itself (click, E / R, new video), so CSS follows it.
+    // Strip: Gradio centres it (justify-content: center) inside an overflow-x: scroll box with a hidden
+    // scrollbar, so with many videos the oldest ones were cut off on the left and unreachable -> "safe
+    // center" (centred while it fits, left-aligned and scrollable when it overflows), mouse wheel over the
+    // strip scrolls it horizontally, the selected thumbnail is kept scrolled into view, and ◀ ▶ buttons at
+    // the strip ends step to the previous / next video (same as E / R). Thumbnail clicks are untouched.
+    // =======================================================================
+    V.modules.strip = (function (core) {
+        const style = document.createElement("style");
+        style.id = "vidosser-strip-css";
+        style.textContent =
+            ".gallery-container .thumbnails{justify-content:safe center!important;padding:6px 10px!important;scroll-behavior:smooth}" +
+            ".gallery-container .thumbnail-item.selected,.gallery-container .thumbnail-item.vidosser-current{outline:3px solid #fff!important;outline-offset:1px;" +
+            "box-shadow:0 0 0 2px var(--color-accent,#f97316),0 0 12px 4px rgba(255,255,255,.55)!important;transform:scale(1.12)!important;z-index:2;position:relative}" +
+            ".gallery-container .grid-container .thumbnail-item.vidosser-current{transform:scale(1.04)!important}" +
+            ".vidosser-strip-btn{position:absolute;z-index:5;width:26px;height:26px;padding:0;border:none;border-radius:50%;cursor:pointer;" +
+            "background:rgba(0,0,0,.6);color:#fff;font:14px/26px system-ui,sans-serif;text-align:center;opacity:.75;box-shadow:0 1px 4px rgba(0,0,0,.5)}" +
+            ".vidosser-strip-btn:hover{opacity:1;background:rgba(0,0,0,.85)}" +
+            ".vidosser-strip-btn:disabled{opacity:.25;cursor:default}";
+        (document.head || document.documentElement).appendChild(style);
+
+        const strips = () => [...document.querySelectorAll(".gallery-container .preview .thumbnails")];
+        const items = st => [...st.querySelectorAll(".thumbnail-item")];
+        function reveal(st, smooth) {                              // selected thumb into view, strip only (never the page)
+            const sel = st.querySelector(".thumbnail-item.selected");
+            if (!sel || st.scrollWidth <= st.clientWidth + 1) return;
+            const l = sel.offsetLeft - st.offsetLeft, r = l + sel.offsetWidth, pad = 14 + sel.offsetWidth * 0.07;   // + the 1.12 scale
+            let x = st.scrollLeft;
+            if (l - pad < x) x = l - pad; else if (r + pad > x + st.clientWidth) x = r + pad - st.clientWidth;
+            if (x !== st.scrollLeft) st.scrollTo({ left: Math.max(0, x), behavior: smooth ? "smooth" : "auto" });
+        }
+        function stepFrom(st, dir) {
+            const pv = st.closest(".preview");
+            const v = pv && [...pv.querySelectorAll("video")].find(x => !x.closest(".thumbnail-item"));
+            if (v && V.stepVideo) { V.stepVideo(v, dir); return; }
+            const all = items(st), i = all.findIndex(t => t.classList.contains("selected")), t = all[i + dir];
+            if (t) t.click();
+        }
+        const btns = new WeakMap();
+        function place(st) {
+            const pv = st.closest(".preview"); if (!pv) return;
+            let b = btns.get(st);
+            const all = items(st);
+            if (!b) {
+                if (getComputedStyle(pv).position === "static") pv.style.position = "relative";
+                b = ["prev", "next"].map(k => {
+                    const el = document.createElement("button");
+                    el.type = "button"; el.className = "vidosser-strip-btn vidosser-strip-" + k;
+                    el.textContent = k === "prev" ? "◀" : "▶";
+                    el.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); stepFrom(st, k === "prev" ? -1 : 1); });
+                    pv.appendChild(el); return el;
+                });
+                btns.set(st, b);
+            }
+            if (b[0].parentNode !== pv) b.forEach(el => pv.appendChild(el));
+            const show = all.length > 1 && st.offsetParent !== null;
+            const i = all.findIndex(t => t.classList.contains("selected"));
+            b[0].title = i18n("Previous video", "Vídeo anterior"); b[1].title = i18n("Next video", "Vídeo siguiente");
+            b[0].disabled = i <= 0; b[1].disabled = i < 0 || i >= all.length - 1;
+            const pr = pv.getBoundingClientRect(), sr = st.getBoundingClientRect();
+            const first = all[0] && all[0].getBoundingClientRect(), last = all[all.length - 1] && all[all.length - 1].getBoundingClientRect();
+            // just outside the visible thumbnails (or the strip edges when it overflows)
+            const left = Math.max(sr.left, first ? first.left : sr.left) - 34, right = Math.min(sr.right, last ? last.right : sr.right) + 8;
+            const top = sr.top + sr.height / 2 - 13 - pr.top;
+            b[0].style.left = Math.max(2, left - pr.left) + "px"; b[1].style.left = Math.min(pr.width - 28, right - pr.left) + "px";
+            b.forEach(el => { el.style.top = top + "px"; el.style.display = show ? "" : "none"; });
+        }
+        const lastSel = new WeakMap(), current = new WeakMap();      // gallery -> index of the video last shown
+        function tick() {
+            // Gradio's grid (preview closed with Esc / ✕) marks nothing: mark the video last shown in the preview
+            for (const g of document.querySelectorAll(".gallery-container")) {
+                const st = g.querySelector(".preview .thumbnails");
+                if (st) { const i = items(st).findIndex(t => t.classList.contains("selected")); if (i >= 0) current.set(g, i); }
+                const grid = g.querySelector(".grid-container");
+                if (!grid) continue;
+                const gi = [...grid.querySelectorAll(".thumbnail-item")], i = current.get(g);
+                gi.forEach((t, k) => t.classList.toggle("vidosser-current", k === i));
+            }
+            for (const st of strips()) {
+                const sel = st.querySelector(".thumbnail-item.selected");
+                if (sel !== lastSel.get(st)) { reveal(st, !!lastSel.get(st)); lastSel.set(st, sel); }
+                place(st);
+            }
+        }
+        // wheel over an overflowing strip: horizontal scroll (vertical wheel too), page / frame stepping untouched otherwise
+        window.addEventListener("wheel", e => {
+            const st = e.target instanceof Element && e.target.closest(".gallery-container .preview .thumbnails");
+            if (!st || st.scrollWidth <= st.clientWidth + 1 || e.ctrlKey) return;
+            const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            const k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? st.clientWidth : 1;
+            st.style.scrollBehavior = "auto"; st.scrollLeft += d * k; st.style.scrollBehavior = "";
+            e.preventDefault(); e.stopPropagation();
+        }, { capture: true, passive: false });
+        setInterval(tick, 250);
+        document.addEventListener("fullscreenchange", () => setTimeout(tick, 60));
+        window.addEventListener("resize", tick);
+        document.addEventListener("click", () => setTimeout(tick, 60), true);
+        return { tick, reveal };
+    })(core);
 
     // =======================================================================
     // MODULE gif (1.4.17) - keys.export_gif (default X): the A-B loop (I / O) of the video -> GIF,

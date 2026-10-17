@@ -2,6 +2,13 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.18] - 2026-10-17
+### Added
+- Gallery: the current video's thumbnail is clearly highlighted (3 px white outline, accent glow, scale 1.12) in the preview strip and in the full grid (Gradio's grid marks nothing, so Vidosser marks the video last shown in the preview), in and out of container fullscreen; follows click, E / R, new videos.
+- ◀ ▶ buttons at the ends of the thumbnail strip: previous / next video (same path as E / R; disabled at the ends); in container fullscreen too.
+### Fixed
+- Gradio 5.29 strip (`justify-content: center` in an `overflow-x: scroll` box with hidden scrollbar): with many videos the oldest thumbnails were cut off on the left and unreachable. Now `safe center`, mouse wheel over an overflowing strip scrolls it horizontally (instead of stepping frames / scrolling the page), and the selected thumbnail is kept in view.
+
 ## [1.4.17] - 2026-10-17
 ### Added
 - Export the A-B loop (I / O) to an animated GIF: key `keys.export_gif` (default **X**, «Exportar bucle a GIF»), in and out of fullscreen. Encoded server-side with ffmpeg (WanGP's imageio-ffmpeg, else ffmpeg on PATH): exact frames A..B, global palette (palettegen stats_mode=full + paletteuse), infinite loop. With Boomerang on for the video the GIF ping-pongs A..B, B-1..A+1 (end frames not repeated, so it loops seamlessly). No complete A-B segment -> message «Primero marca un bucle con I y O» (nothing is exported). Progress toast with elapsed seconds, then «GIF guardado: <ruta>» and a «⬇ Descargar GIF» link (20 s, GIFs up to 25 MB; not in native fullscreen). The info panel shows «Exportar GIF: X» while a loop is set. Max 3000 frames.
