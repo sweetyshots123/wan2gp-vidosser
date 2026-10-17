@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.16
+*[English](README.md)* · Licencia MIT · versión 1.4.17
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -84,6 +84,12 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 - Sin barra: **clic** sobre el vídeo o **Espacio** = reproducir / pausar, y se puede arrastrar sobre **toda la imagen** para pasar fotogramas (sin la zona de 40 px).
 - «Barra de progreso fina (3 px)» (`show_thin_progress`, activada por defecto): una línea de 3 px, que no se puede pulsar, en el borde inferior de la imagen indica la posición mientras los controles están ocultos.
 
+## Exportar el bucle a GIF (`X`, `keys.export_gif`)
+
+Con un bucle A-B marcado (I / O), **X** lo guarda como GIF animado (también a pantalla completa): fotogramas exactos de A a B, codificado en el equipo de WanGP con ffmpeg (paleta + tramado), en bucle infinito. Con Boomerang activado el GIF va y vuelve (A..B..A+1, sin repetir los extremos). Sin bucle completo: «Primero marca un bucle con I y O» (no se exporta nada). Mientras exporta se ve el tiempo transcurrido; al terminar, «GIF guardado: <ruta>» y un enlace «⬇ Descargar GIF» durante 20 s (no en la pantalla completa nativa del vídeo).
+
+Sección **GIF** de la pestaña: «Tamaño del GIF» (Original, 75 %, 50 %, 33 %, ancho máx. 1280 / 854 / 640 / 480; nunca amplía), «FPS del GIF» (0 = los del vídeo; nunca más), «Colores» (16–256), «Tramado» (Sierra / Bayer / Floyd-Steinberg / ninguno), «Carpeta de GIFs» (por defecto `<salidas>/gifs`; debe estar dentro de la carpeta de WanGP o de sus salidas). Nombre: `<vídeo>_f<A>-<B>[_boomerang].gif`, nunca se sobrescribe.
+
 ## Información del vídeo (`P`)
 
 - **E** / **R** pasan al vídeo anterior / siguiente de la galería (también en pantalla completa, que se mantiene; en los extremos: «Primer vídeo» / «Último vídeo»). Configurables como «Vídeo anterior» / «Vídeo siguiente».
@@ -132,7 +138,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.16.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.17.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

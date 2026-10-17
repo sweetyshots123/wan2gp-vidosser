@@ -2,6 +2,13 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.17] - 2026-10-17
+### Added
+- Export the A-B loop (I / O) to an animated GIF: key `keys.export_gif` (default **X**, «Exportar bucle a GIF»), in and out of fullscreen. Encoded server-side with ffmpeg (WanGP's imageio-ffmpeg, else ffmpeg on PATH): exact frames A..B, global palette (palettegen stats_mode=full + paletteuse), infinite loop. With Boomerang on for the video the GIF ping-pongs A..B, B-1..A+1 (end frames not repeated, so it loops seamlessly). No complete A-B segment -> message «Primero marca un bucle con I y O» (nothing is exported). Progress toast with elapsed seconds, then «GIF guardado: <ruta>» and a «⬇ Descargar GIF» link (20 s, GIFs up to 25 MB; not in native fullscreen). The info panel shows «Exportar GIF: X» while a loop is set. Max 3000 frames.
+- New «GIF» section: size (Original, 75 %, 50 %, 33 %, max width 1280 / 854 / 640 / 480, never upscaled), FPS (0 = the video's; 1–60, never above the video's), colours (16–256), dithering (Sierra / Bayer / Floyd-Steinberg / none), folder (default `<outputs>/gifs`). Missing values -> defaults.
+### Security
+- The source must be a video served by WanGP (same check as Save frame); the GIF folder must be inside the WanGP folder, its outputs folders or the temp folder (refused on save and on export); file names are generated (`<video>_f<A>-<B>[_boomerang].gif`, never overwritten).
+
 ## [1.4.16] - 2026-10-13
 ### Changed
 - Edge pan no longer pauses over the thumbnail strip / gallery / buttons: it keeps going after the pointer leaves the video past an edge (clicks unaffected: only pointermove is observed, nothing prevented). Still stops on return to the inner area, at the picture's edge, zoom reset, blur, leaving the window, typing.

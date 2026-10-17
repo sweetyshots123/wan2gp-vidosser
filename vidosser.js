@@ -710,6 +710,7 @@
         jump_forward: "w",
         jump_back: "q",
         save_frame_as: "d",
+        export_gif: "x",
         toggle_loop: "l",
         toggle_boomerang: "b",
         toggle_info: "p",
@@ -2488,6 +2489,66 @@
     }, SETTINGS.new_video || {}));
 
     // =======================================================================
+    // MODULE gif (1.4.17) - keys.export_gif (default X): the A-B loop (I / O) of the video -> GIF,
+    // encoded server-side with ffmpeg (palettegen / paletteuse) into gif.folder (<outputs>/gifs).
+    // Boomerang on for the video -> ping-pong GIF (A..B, B-1..A+1: end frames not repeated).
+    // No complete A-B segment -> message «Primero marca un bucle con I y O» (nothing exported).
+    // =======================================================================
+    V.modules.gif = (function (core) {
+        let busy = null, link = null, linkTimer = 0;
+        const beep = kind => { const sf = V.config.save_frame || {}; if (sf.sound !== false) core.sound(kind, (Number(sf.sound_volume) || 60) / 100); };
+        function offerDownload(res) {
+            if (!res.data) return;
+            if (link) { link.remove(); URL.revokeObjectURL(link.href); }
+            const bin = atob(res.data), bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const fs = core.fsElement();
+            if (fs instanceof HTMLVideoElement) return;                 // nothing can be drawn over native fullscreen
+            link = document.createElement("a");
+            link.className = "vidosser-gif-link";
+            link.href = URL.createObjectURL(new Blob([bytes], { type: "image/gif" }));
+            link.download = res.name;
+            link.textContent = "⬇ " + i18n("Download GIF", "Descargar GIF") + ` (${(res.bytes / 1048576).toFixed(1)} MB)`;
+            link.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:8px 14px;border-radius:8px;" +
+                "background:rgba(22,128,62,.95);color:#fff;font:600 14px system-ui,'Segoe UI',sans-serif;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.4);";
+            (fs || document.body).appendChild(link);
+            clearTimeout(linkTimer);
+            linkTimer = setTimeout(() => { if (link) { link.remove(); URL.revokeObjectURL(link.href); link = null; } }, 20000);
+        }
+        async function exportGif(v) {
+            const L = V.modules.loop, seg = L && L.segment ? L.segment(v) : null;
+            if (!seg || !Number.isFinite(seg.in) || !Number.isFinite(seg.out)) {
+                const msg = i18n("Mark a loop with I and O first", "Primero marca un bucle con I y O");
+                core.toast(msg, "info", 2500); core.showOverlay(v, msg); return;
+            }
+            if (busy) { core.toast(i18n("A GIF is already being exported", "Ya se está exportando un GIF"), "info", 1800); return; }
+            const info = await core.ensureFps(v);
+            const boomerang = !!(L.boomerang && L.boomerang.on(v));
+            const a = Math.min(seg.in, seg.out), b = Math.max(seg.in, seg.out);
+            const t0 = performance.now();
+            const label = () => `${i18n("Exporting GIF", "Exportando GIF")} ${a}–${b}${boomerang ? " (Boomerang)" : ""}… ${Math.round((performance.now() - t0) / 1000)} s`;
+            core.toast(label(), "info", 4000); core.showOverlay(v, label());
+            busy = setInterval(() => { core.toast(label(), "info", 4000); core.showOverlay(v, label()); }, 1000);
+            let res;
+            try { res = await core.bridge({ action: "export_gif", url: v.currentSrc, in: a, out: b, fps: info.fps, boomerang }, 900000); }
+            catch (err) { res = { ok: false, error: err.message }; }
+            clearInterval(busy); busy = null;
+            if (res.ok) {
+                const msg = `${i18n("GIF saved", "GIF guardado")}: ${res.path}`;
+                core.toast(msg, "ok", 6000); core.showOverlay(v, msg); beep("ok");
+                offerDownload(res);
+            } else {
+                const msg = `${i18n("GIF export failed", "Error al exportar el GIF")}: ${res.error}`;
+                core.toast(msg, "error", 6000); core.showOverlay(v, msg); beep("error");
+            }
+            V.lastGif = Object.assign({}, res, { data: undefined });
+            return res;
+        }
+        core.registerAction("export_gif", v => { exportGif(v); });
+        return { exportGif, busy: () => !!busy };
+    })(core);
+
+    // =======================================================================
     // Add future modules here:  V.modules.<name> = (function (core, CFG) { ... })(core, V.config.<name> = {...});
     // =======================================================================
 
@@ -2722,6 +2783,8 @@
                 `${i18n("Volume", "Volumen")}: ${v.muted ? i18n("muted", "silenciado") : Math.round(v.volume * 100) + " %"}`,
                 `${i18n("Loop", "Bucle")}: ${loop}`,
             ];
+            if (seg && Number.isFinite(seg.in) && Number.isFinite(seg.out) && core.KEYS.export_gif)
+                lines.push(`${i18n("Export GIF", "Exportar GIF")}: ${String(core.KEYS.export_gif).toUpperCase()}`);
             if (b) lines.push(`${i18n("File size", "Tamaño")}: ${fmtSize(b)}`);
             return lines.join("\n");
         }

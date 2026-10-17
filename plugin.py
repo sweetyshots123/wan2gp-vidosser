@@ -47,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.16"
+PLUGIN_VERSION = "1.4.17"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -71,6 +71,7 @@ _TEXT = {
     "key_jump_forward": ("Jump forward", "Salto adelante"),
     "key_jump_back": ("Jump back", "Salto atrás"),
     "key_save_frame_as": ("Save frame", "Guardar fotograma"),
+    "key_export_gif": ("Export loop to GIF", "Exportar bucle a GIF"),
     "key_toggle_loop": ("Loop on/off (this video)", "Bucle on/off (este vídeo)"),
     "key_toggle_info": ("Video info", "Información del vídeo"),
     "key_prev_video": ("Previous video", "Vídeo anterior"),
@@ -268,6 +269,23 @@ _TEXT = {
                    "Es el único aviso posible en la pantalla completa nativa del vídeo, además de la línea de subtítulo."),
     "sound_volume": ("Volume", "Volumen"),
     # overlay / fullscreen
+    "sec_gif": ("### GIF (export the A-B loop)", "### GIF (exportar el bucle A-B)"),
+    "gif_scale": ("GIF size", "Tamaño del GIF"),
+    "gif_fps": ("GIF FPS (0 = original; never above the video's)", "FPS del GIF (0 = original; nunca más que el vídeo)"),
+    "gif_colors": ("Colours", "Colores"),
+    "gif_dither": ("Dithering", "Tramado"),
+    "gif_folder": ("GIF folder (on the computer running WanGP, inside the WanGP folder or its outputs)",
+                   "Carpeta de GIFs (en el equipo donde corre WanGP, dentro de la carpeta de WanGP o de sus salidas)"),
+    "ch_gs_original": ("Original", "Original"), "ch_gs_75": ("75 %", "75 %"), "ch_gs_50": ("50 %", "50 %"), "ch_gs_33": ("33 %", "33 %"),
+    "ch_gs_w1280": ("Max width 1280", "Ancho máx. 1280"), "ch_gs_w854": ("Max width 854", "Ancho máx. 854"),
+    "ch_gs_w640": ("Max width 640", "Ancho máx. 640"), "ch_gs_w480": ("Max width 480", "Ancho máx. 480"),
+    "ch_gd_sierra": ("Smooth (Sierra)", "Suave (Sierra)"), "ch_gd_bayer": ("Pattern (Bayer)", "Trama (Bayer)"),
+    "ch_gd_floyd": ("Floyd-Steinberg", "Floyd-Steinberg"), "ch_gd_none": ("None", "Ninguno"),
+    "err_gif_short": ("The loop is too short (at least 2 frames)", "El bucle es demasiado corto (mínimo 2 fotogramas)"),
+    "err_gif_long": ("The loop is too long for a GIF (max {n} frames)", "El bucle es demasiado largo para un GIF (máx. {n} fotogramas)"),
+    "err_gif_failed": ("ffmpeg failed: {error}", "ffmpeg falló: {error}"),
+    "err_gif_folder": ("GIF folder must be inside the WanGP folder or its outputs: {folder}",
+                       "La carpeta de GIFs debe estar dentro de la carpeta de WanGP o de sus salidas: {folder}"),
     "sec_overlay": ("### Overlay and fullscreen", "### Indicador y pantalla completa"),
     "show_overlay": ("Show overlay on the video", "Mostrar indicador sobre el vídeo"),
     "container_fs": ("Video fullscreen with overlays and messages", "Pantalla completa del vídeo con indicadores y mensajes"),
@@ -334,7 +352,7 @@ class LocalizedError(Exception):
 
 
 # (action, English label); localized labels: tr("key_<action>", lang)
-KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as", "toggle_info", "prev_video", "next_video", "reset_zoom",
+KEY_ACTIONS = [(a, _TEXT["key_" + a][0]) for a in ("next_frame", "prev_frame", "jump_forward", "jump_back", "save_frame_as", "export_gif", "toggle_info", "prev_video", "next_video", "reset_zoom",
                                                    "toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")]
 LOOP_ACTIONS = ("toggle_loop", "toggle_boomerang", "mark_in", "mark_out", "clear_segment")
 
@@ -356,6 +374,7 @@ DEFAULT_SETTINGS = {
         "jump_forward": "w",
         "jump_back": "q",
         "save_frame_as": "d",
+        "export_gif": "x",          # export the A-B loop (I / O) to a GIF (ping-pong in Boomerang mode)
         "toggle_loop": "l",         # loop on/off for the current video
         "toggle_boomerang": "b",
         "prev_video": "e",          # previous / next video of the gallery (also in fullscreen)
@@ -428,6 +447,13 @@ DEFAULT_SETTINGS = {
                                     # feedback possible in native <video> fullscreen
         "sound_volume": 60,         # 1..100
     },
+    "gif": {                        # 1.4.17: export of the A-B loop (keys.export_gif)
+        "scale": "original",        # "original" | "75" | "50" | "33" (%) | "w1280" | "w854" | "w640" | "w480" (max width)
+        "fps": 0,                   # 0 = the video's fps; else 1..60, never above the video's
+        "colors": 256,              # palette size 16..256 (palettegen)
+        "dither": "sierra",         # "sierra" | "bayer" | "floyd" | "none" (paletteuse)
+        "folder": "",               # "" = <WanGP outputs folder>/gifs; must be inside the WanGP folder / its outputs
+    },
 }
 _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("frame_step", "wheel_mod_action"): ("jump", "speed"),
@@ -439,7 +465,9 @@ _CHOICES = {("frame_step", "jump_mode"): ("seconds", "frames"),
             ("frame_step", "wheel_jump_modifier"): ("ctrl", "alt", "shift", "meta", "none"),
             ("frame_step", "drag_button"): ("left", "right"),
             ("volume", "drag_button"): ("left", "right"),
-            ("general", "hide_controls"): ("off", "fullscreen", "always")}
+            ("general", "hide_controls"): ("off", "fullscreen", "always"),
+            ("gif", "scale"): ("original", "75", "50", "33", "w1280", "w854", "w640", "w480"),
+            ("gif", "dither"): ("sierra", "bayer", "floyd", "none")}
 # dropdown / radio choices: (label key, value). Values are what settings.json stores (never translated).
 _CHOICE_KEYS = {
     "hide_controls": [("ch_hc_off", "off"), ("ch_hc_fullscreen", "fullscreen"), ("ch_hc_always", "always")],
@@ -453,6 +481,8 @@ _CHOICE_KEYS = {
     "loop_mode": [("ch_loop_normal", "normal"), ("ch_boomerang", "boomerang")],
     "format": [("ch_png", "png"), ("ch_jpg", "jpg")],
     "mode": [("ch_ask", "ask"), ("ch_direct", "direct")],
+    "gif_scale": [("ch_gs_" + v, v) for v in ("original", "75", "50", "33", "w1280", "w854", "w640", "w480")],
+    "gif_dither": [("ch_gd_" + v, v) for v in ("sierra", "bayer", "floyd", "none")],
 }
 
 
@@ -474,7 +504,7 @@ def _page_lang_js(n_inputs):
 
 def title_md(lang="en"):
     return f"## Vidosser {PLUGIN_VERSION}\n" + tr("intro", lang)
-_ALLOW_EMPTY = {("save_frame", "folder")}
+_ALLOW_EMPTY = {("save_frame", "folder"), ("gif", "folder")}
 
 
 def _coerce(section, key, default, value):
@@ -493,7 +523,7 @@ def _coerce(section, key, default, value):
             return "" if (section, key) in _ALLOW_EMPTY else default
         return value.lower() if section == "keys" else value
     if isinstance(default, (int, float)):
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 and math.isfinite(value)
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and (value > 0 or (section, key) == ("gif", "fps") and value == 0)
         if not ok:
             return default
         return int(round(value)) if isinstance(default, int) else float(value)
@@ -583,6 +613,8 @@ def load_settings(path=None):
     settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
     settings["frame_step"]["drag_pixels_per_frame"] = max(1, min(200, settings["frame_step"]["drag_pixels_per_frame"]))
     settings["frame_step"]["zoom_edge_speed"] = _edge_speed(settings["frame_step"].get("zoom_edge_speed", 1400))
+    settings["gif"]["fps"] = max(0, min(60, settings["gif"]["fps"]))
+    settings["gif"]["colors"] = max(16, min(256, settings["gif"]["colors"]))
     settings["volume"]["drag_pixels_per_percent"] = max(0.2, min(50.0, settings["volume"]["drag_pixels_per_percent"]))
     # 1.4.6: files without volume.drag_button keep the volume drag on the scrub button (as up to 1.4.5)
     user_volume = user_settings.get("volume") if isinstance(user_settings.get("volume"), dict) else {}
@@ -694,6 +726,23 @@ class VidosserPlugin(WAN2GPPlugin):
 
     def default_folder(self):
         return os.path.abspath(os.path.join(self._save_path(), "frames"))
+
+    def default_gif_folder(self):
+        return os.path.abspath(os.path.join(self._save_path(), "gifs"))
+
+    def resolve_gif_folder(self, folder):
+        folder = str(folder or "").strip().strip('"')
+        return os.path.abspath(os.path.expanduser(folder)) if folder else self.default_gif_folder()
+
+    def gif_folder_allowed(self, path):
+        real = os.path.realpath(path)
+        for root in self._allowed_roots() + [os.path.realpath(self.default_gif_folder())]:
+            try:
+                if os.path.commonpath([real, root]) == root:
+                    return True
+            except ValueError:
+                continue
+        return False
 
     def resolve_folder(self, folder):
         folder = str(folder or "").strip().strip('"')
@@ -850,6 +899,18 @@ class VidosserPlugin(WAN2GPPlugin):
                 sound_volume = loc(gr.Slider(label=T("sound_volume"), minimum=1, maximum=100, step=1, value=current("save_frame", "sound_volume"),
                                              elem_id="vidosser_sound_volume"), label="sound_volume")
         with gr.Group():
+            loc(gr.Markdown(T("sec_gif"), elem_id="vidosser_sec_gif"), value="sec_gif")
+            with gr.Row():
+                gif_scale = loc(gr.Dropdown(label=T("gif_scale"), choices=C("gif_scale"), value=current("gif", "scale"), elem_id="vidosser_gif_scale"),
+                                label="gif_scale", choices=("choices", "gif_scale"))
+                gif_fps = loc(gr.Number(label=T("gif_fps"), value=current("gif", "fps"), minimum=0, maximum=60, step=1, elem_id="vidosser_gif_fps"), label="gif_fps")
+                gif_colors = loc(gr.Slider(label=T("gif_colors"), minimum=16, maximum=256, step=8, value=current("gif", "colors"), elem_id="vidosser_gif_colors"),
+                                 label="gif_colors")
+                gif_dither = loc(gr.Dropdown(label=T("gif_dither"), choices=C("gif_dither"), value=current("gif", "dither"), elem_id="vidosser_gif_dither"),
+                                 label="gif_dither", choices=("choices", "gif_dither"))
+            gif_folder = loc(gr.Textbox(label=T("gif_folder"), value=current("gif", "folder"), placeholder=self.default_gif_folder(), max_lines=1,
+                                        elem_id="vidosser_gif_folder"), label="gif_folder")
+        with gr.Group():
             loc(gr.Markdown(T("sec_overlay"), elem_id="vidosser_sec_overlay"), value="sec_overlay")
             with gr.Row():
                 show_overlay = loc(gr.Checkbox(label=T("show_overlay"), value=current("general", "show_overlay"), elem_id="vidosser_show_overlay"), label="show_overlay")
@@ -875,7 +936,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed, gif_scale, gif_fps, gif_colors, gif_dither, gif_folder]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -910,7 +971,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed")
+                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed", "gif_scale", "gif_fps", "gif_colors", "gif_dither", "gif_folder")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -929,7 +990,8 @@ class VidosserPlugin(WAN2GPPlugin):
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
-                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", zoom_edge_pan=False, zoom_edge_speed=1400, lang="en"):
+                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", zoom_edge_pan=False, zoom_edge_speed=1400,
+                         gif_scale="original", gif_fps=0, gif_colors=256, gif_dither="sierra", gif_folder="", lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -951,6 +1013,17 @@ class VidosserPlugin(WAN2GPPlugin):
         sound_volume = number(sound_volume, "sound_volume", 1, 100, True)
         drag_ppf = number(drag_ppf, "drag_ppf", 1, 200, True)
         volume_ppp = number(volume_ppp, "volume_ppp", 0.2, 50, False)
+        gif_fps = number(gif_fps, "gif_fps", 0, 60, True)
+        gif_colors = number(gif_colors, "gif_colors", 16, 256, True)
+        gif_scale = str(gif_scale or "original").lower()
+        if gif_scale not in _CHOICES[("gif", "scale")]:
+            errors.append(tr("msg_invalid", lang, label=tr("gif_scale", lang)))
+        gif_dither = str(gif_dither or "sierra").lower()
+        if gif_dither not in _CHOICES[("gif", "dither")]:
+            errors.append(tr("msg_invalid", lang, label=tr("gif_dither", lang)))
+        gif_folder = str(gif_folder or "").strip().strip('"')
+        if gif_folder and not self.gif_folder_allowed(self.resolve_gif_folder(gif_folder)):
+            errors.append(tr("err_gif_folder", lang, folder=self.resolve_gif_folder(gif_folder)))
         folder = str(folder or "").strip().strip('"')
         if sf_mode == "direct" or folder:
             ok, path, message = self.check_folder(folder, create=sf_mode == "direct", lang=lang)
@@ -1003,6 +1076,7 @@ class VidosserPlugin(WAN2GPPlugin):
         settings["loop"].update(loop_all=bool(loop_all), mode=loop_mode)
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
                                   drag_button=volume_button, drag_require_ctrl=bool(volume_ctrl), remember=bool(volume_remember))
+        settings["gif"].update(scale=gif_scale, fps=gif_fps, colors=gif_colors, dither=gif_dither, folder=gif_folder)
         settings["new_video"].update(no_autojump_fullscreen=bool(no_autojump), jump_on_fullscreen_exit=bool(jump_on_exit), notify=bool(new_notify))
         notes += resolve_overlaps(settings, saved, lang)
         try:
@@ -1024,6 +1098,8 @@ class VidosserPlugin(WAN2GPPlugin):
         try:
             if req.get("action") == "save_frame":
                 out = self.save_frame(req, lang)
+            elif req.get("action") == "export_gif":
+                out = self.export_gif(req, lang)
             else:
                 out = {"ok": False, "error": tr("err_unknown_action", lang)}
         except LocalizedError as e:
@@ -1130,4 +1206,96 @@ class VidosserPlugin(WAN2GPPlugin):
             result.update(path=path, name=os.path.basename(path))
         else:
             result.update(data=base64.b64encode(data).decode("ascii"), mime=mime)
+        return result
+
+    # ---------------------------------------------------------------- GIF (1.4.17)
+    GIF_MAX_FRAMES = 3000
+    GIF_DATA_MAX = 25 * 1024 * 1024   # GIFs up to this size are also sent back for a browser download
+
+    @staticmethod
+    def ffmpeg_exe():
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+            if exe and os.path.isfile(exe):
+                return exe
+        except Exception:
+            pass
+        return shutil.which("ffmpeg")
+
+    @staticmethod
+    def gif_filter(first, last, src_fps, boomerang, fps=0, scale="original", colors=256, dither="sierra"):
+        """filter_complex for frames first..last (inclusive) of input 0: optional ping-pong without
+        repeating the end frames (f0..fN, fN-1..f1), fps cap, scale, palettegen/paletteuse."""
+        n = last - first + 1
+        sf = f"{src_fps:.6f}".rstrip("0").rstrip(".")
+        norm = f"setpts=N/({sf}*TB)"
+        chain = f"[0:v]trim=start_frame={first}:end_frame={last + 1},{norm}"
+        if boomerang and n >= 3:
+            chain += (f",split[gf][gr];[gr]reverse,trim=start_frame=1:end_frame={n - 1},{norm}[grr];"
+                      f"[gf][grr]concat=n=2:v=1:a=0,{norm}")
+        out_fps = src_fps
+        if fps and fps < src_fps - 1e-6:
+            chain += f",fps={fps}"
+            out_fps = float(fps)
+        if scale in ("75", "50", "33"):
+            k = {"75": 0.75, "50": 0.5, "33": 1 / 3}[scale]
+            chain += f",scale=trunc(iw*{k:.6f}):-1:flags=lanczos"
+        elif scale.startswith("w") and scale[1:].isdigit():
+            chain += f",scale='min(iw,{int(scale[1:])})':-1:flags=lanczos"
+        dith = {"sierra": "sierra2_4a", "bayer": "bayer:bayer_scale=3", "floyd": "floyd_steinberg", "none": "none"}.get(dither, "sierra2_4a")
+        chain += f",split[gp0][gp1];[gp0]palettegen=max_colors={int(colors)}:stats_mode=full[gpal];[gp1][gpal]paletteuse=dither={dith}"
+        return chain, out_fps
+
+    def export_gif(self, req, lang="en"):
+        settings = load_settings()["gif"]
+        source = self.video_path_from_url(req.get("url"))
+        try:
+            first, last = int(req.get("in")), int(req.get("out"))
+            src_fps = float(req.get("fps") or 0)
+        except (TypeError, ValueError):
+            raise LocalizedError("err_bad_request")
+        if first > last:
+            first, last = last, first
+        if first < 0 or not math.isfinite(src_fps) or not (1 <= src_fps <= 240):
+            raise LocalizedError("err_bad_request")
+        if last - first + 1 < 2:
+            raise LocalizedError("err_gif_short")
+        if last - first + 1 > self.GIF_MAX_FRAMES:
+            raise LocalizedError("err_gif_long", n=self.GIF_MAX_FRAMES)
+        folder = self.resolve_gif_folder(settings["folder"])
+        if not self.gif_folder_allowed(folder):
+            raise LocalizedError("err_gif_folder", folder=folder)
+        exe = self.ffmpeg_exe()
+        if not exe:
+            raise LocalizedError("err_no_ffmpeg")
+        boomerang = bool(req.get("boomerang"))
+        graph, out_fps = self.gif_filter(first, last, src_fps, boomerang, settings["fps"], settings["scale"], settings["colors"], settings["dither"])
+        os.makedirs(folder, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".vidosser_", suffix=".gif", dir=folder)
+        os.close(fd)
+        try:
+            t0 = time.time()
+            run = subprocess.run([exe, "-v", "error", "-nostdin", "-y", "-i", source, "-filter_complex", graph, "-an", "-loop", "0",
+                                  "-final_delay", str(max(2, round(100 / out_fps))), tmp],
+                                 capture_output=True, timeout=900)
+            if run.returncode != 0 or os.path.getsize(tmp) == 0:
+                err = (run.stderr or b"").decode("utf-8", "replace").strip().splitlines()
+                raise LocalizedError("err_gif_failed", error=(err[-1] if err else f"exit {run.returncode}")[:300])
+            with open(tmp, "rb") as reader:
+                data = reader.read()
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        base = f"{Path(source).stem}_f{first:05d}-{last:05d}{'_boomerang' if boomerang else ''}"
+        path = self.write_unique(folder, base, "gif", data)
+        width = height = 0
+        if data[:6] in (b"GIF87a", b"GIF89a"):
+            width, height = int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")
+        result = {"ok": True, "path": path, "name": os.path.basename(path), "bytes": len(data), "width": width, "height": height,
+                  "fps": round(out_fps, 3), "boomerang": boomerang, "in": first, "out": last, "seconds": round(time.time() - t0, 2)}
+        if len(data) <= self.GIF_DATA_MAX:
+            result["data"] = base64.b64encode(data).decode("ascii")
         return result
