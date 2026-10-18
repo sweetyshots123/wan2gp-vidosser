@@ -6,6 +6,7 @@ All notable changes to Vidosser. Versions follow [Semantic Versioning](https://s
 ### Fixed
 - Seek bar: in fullscreen with a picture narrower than the screen it spanned the whole container width while the thin progress line spanned the picture -> two stacked bars, preview at the far edge. The bar now spans the displayed picture (object-fit: contain rect; the whole box while zoomed) at its bottom, the thin progress line and the A-B loop line are hidden while it is shown (the A-B segment is drawn on it), and the preview is kept inside the picture. Hover time / frame = pointer position over the picture-wide bar (no inset).
 ### Changed
+- Outside fullscreen Chrome's own progress line (native timeline) is hidden on videos that get Vidosser's bar (the native play / time / volume / fullscreen row stays) and Vidosser's bar takes its place just above that row; while the pointer is over the video a thin idle bar shows the position, it grows and gets the preview in the bottom band. Setting off -> native timeline back.
 - New look: soft dark gradient, dark translucent track, lighter hover segment, played part in the accent colour, round thumb on hover / drag.
 
 ## [1.4.19] - 2026-10-18

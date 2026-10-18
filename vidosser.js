@@ -2536,6 +2536,11 @@
             "background:var(--color-accent,#f97316);box-shadow:0 0 0 2px #fff,0 1px 4px rgba(0,0,0,.6);transform:scale(0);transition:transform .1s}" +
             ".vidosser-seek:hover .vs-thumb,.vidosser-seek.vs-drag .vs-thumb{transform:scale(1)}" +
             ".vidosser-seek .vs-mark{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#fff;opacity:.9}" +
+            ".vidosser-seek.vs-idle{background:none;pointer-events:none}" +
+            ".vidosser-seek.vs-idle .vs-track{height:3px;bottom:9px}" +
+            ".vidosser-seek.vs-idle .vs-thumb,.vidosser-seek.vs-idle .vs-mark,.vidosser-seek.vs-idle .vs-hov,.vidosser-seek.vs-idle .vs-tlabel{display:none}" +
+            // Chrome's own timeline is replaced by ours (the native buttons / time row stays)
+            "video.vidosser-seekbar::-webkit-media-controls-timeline{display:none!important}" +
             "html.vidosser-seek-on .vidosser-thin-progress,html.vidosser-seek-on .vidosser-loop-bar{visibility:hidden!important}" +
             ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;border-radius:8px;background:rgba(15,15,15,.88);" +
             "box-shadow:0 4px 14px rgba(0,0,0,.5);color:#fff;font:600 13px/1.3 system-ui,'Segoe UI',sans-serif;text-align:center}" +
@@ -2664,6 +2669,9 @@
                 if (m % every === 0) { const l = document.createElement("div"); l.className = "vs-tlabel"; l.style.left = left; l.textContent = m + ":00"; ui.ticks.appendChild(l); }
             }
         }
+        function idle() {                                            // pointer over the video, outside the band: thin bar only
+            ui.root.classList.add("vs-idle"); ui.tip.style.display = "none"; ui.mark.style.display = "none"; lastF = null;
+        }
         function hide() {
             if (!ui || drag) return;
             ui.root.style.display = "none"; ui.tip.style.display = "none"; ui.mark.style.display = "none"; cur = null; lastF = null;
@@ -2715,7 +2723,7 @@
                 try { ui.root.setPointerCapture(e.pointerId); } catch (_) {}
                 seekTo(v, e.clientX, e);
             } else if (e.type === "pointermove") {
-                if (drag) seekTo(v, e.clientX, e); else { show(v); hover(v, e.clientX); }
+                if (drag) seekTo(v, e.clientX, e); else { show(v); ui.root.classList.remove("vs-idle"); hover(v, e.clientX); }
             } else if (e.type === "pointerup" || e.type === "pointercancel") {
                 if (!drag) return;
                 const d = drag; drag = null; ui.root.classList.remove("vs-drag");
@@ -2734,13 +2742,20 @@
             const v = core.videoAtPoint(e.clientX, e.clientY);
             if (!usable(v)) { hide(); return; }
             const z = zone(v);
-            if (e.clientX >= z.L && e.clientX <= z.R && e.clientY >= z.T && e.clientY <= z.B) { show(v); hover(v, e.clientX); }
-            else hide();
+            v.classList.add("vidosser-seekbar");
+            if (e.clientX >= z.L && e.clientX <= z.R && e.clientY >= z.T && e.clientY <= z.B) { show(v); ui.root.classList.remove("vs-idle"); hover(v, e.clientX); }
+            else { show(v); idle(); }
         }, { passive: true });
         document.addEventListener("fullscreenchange", () => { drag = null; hide(); });
         window.addEventListener("blur", () => { if (!drag) hide(); });
         setInterval(() => { if (cur && ui && !drag) { if (!usable(cur)) hide(); else played(cur); } }, 200);
-        return { config: GEN, onSettings: () => { if (!on()) { drag = null; hide(); } }, shown: () => !!cur, zone: v => zone(v) };
+        // the native timeline is hidden only on videos that get our bar, and only while the setting is on
+        const mark = () => document.querySelectorAll("video").forEach(v => {
+            const want = on() && !v.closest(".thumbnail-item") && Number.isFinite(v.duration) && v.duration > 0;
+            if (v.classList.contains("vidosser-seekbar") !== want) v.classList.toggle("vidosser-seekbar", want);
+        });
+        setInterval(mark, 1000); document.addEventListener("loadedmetadata", mark, true);
+        return { config: GEN, onSettings: () => { mark(); if (!on()) { drag = null; hide(); } }, shown: () => !!cur && !!ui && !ui.root.classList.contains("vs-idle"), zone: v => zone(v) };
     })(core, core.CFG);
 
     // =======================================================================
