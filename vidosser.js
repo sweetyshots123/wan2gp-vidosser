@@ -2553,7 +2553,12 @@
         const boxOf = v => { const Z = V.modules.zoom; if (Z && Z.box) return Z.box(v); const r = v.getBoundingClientRect(); return { L: r.left, T: r.top, R: r.right, B: r.bottom, w: r.width, h: r.height }; };
         const nativeBar = v => v.controls && core.fsElement() !== v;
         function zone(v) {                                           // bar rectangle (screen px)
-            const b = boxOf(v), bottom = b.B - (nativeBar(v) ? NATIVE_BAR : 0);
+            const b = boxOf(v);
+            let bottom = b.B - (nativeBar(v) ? NATIVE_BAR : 0);
+            // gr.Video's own player bar (.controls next to the <video>, shown when not hidden): stay above it
+            const wrap = v.parentElement && v.parentElement.parentElement;
+            const gc = wrap && wrap.querySelector(":scope > .controls, :scope > * > .controls");
+            if (gc) { const r = gc.getBoundingClientRect(); if (r.height > 0 && r.top < bottom && r.bottom > b.T) bottom = Math.min(bottom, r.top); }
             const fsr = core.fsElement() ? core.fsElement().getBoundingClientRect() : null;
             const B = fsr ? Math.min(bottom, fsr.bottom) : Math.min(bottom, window.innerHeight);
             const L = Math.max(b.L, fsr ? fsr.left : 0), R = Math.min(b.R, fsr ? fsr.right : window.innerWidth);
