@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.19
+*[English](README.md)* · Licencia MIT · versión 1.4.20
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -86,7 +86,7 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 
 ## Barra de avance con vista previa (`seek_preview`, activada por defecto, 1.4.19)
 
-La barra de controles de Chrome no se puede ampliar (y está oculta a pantalla completa), así que Vidosser dibuja la suya: al llevar el ratón a la franja inferior del vídeo (justo encima de la barra nativa si se ve; abajo del todo a pantalla completa) aparece una barra que engorda bajo el puntero y una miniatura flotante con el fotograma de ese punto, su tiempo (`mm:ss.cc`) y su número (un segundo vídeo oculto salta a él; gana la última petición, así va fluido en vídeos largos). Clic o arrastrar = ir al fotograma exacto, la imagen se actualiza en directo y la miniatura muestra el fotograma actual; si se estaba reproduciendo, sigue al soltar. Ajuste fino (como YouTube): al arrastrar, mantener **Mayúsculas** o alejar el puntero más de 40 px por encima / debajo de la barra → 6 px = 1 fotograma (la etiqueta dice «fino»). En vídeos de 2 min o más se marcan los minutos (etiquetas cada 1, 5 o 10 min según el espacio). Funciona en la pantalla completa de Vidosser y fuera; no en la pantalla completa nativa del vídeo. Lo que se hace sobre la barra no afecta al arrastre de fotogramas, volumen, zoom, clic de reproducir / pausa, doble clic ni miniaturas.
+La barra de controles de Chrome no se puede ampliar (y está oculta a pantalla completa), así que Vidosser dibuja la suya: al llevar el ratón a la franja inferior del vídeo (justo encima de la barra nativa si se ve; abajo del todo a pantalla completa) aparece una barra del ancho de la imagen visible (no de las bandas negras): pista oscura translúcida, parte reproducida en el color de acento, tramo más claro hasta el puntero, bucle A-B en ámbar y un pequeño punto redondo; mientras se ve, la línea fina de progreso y la del bucle se ocultan; engorda bajo el puntero y una miniatura flotante con el fotograma de ese punto, su tiempo (`mm:ss.cc`) y su número (un segundo vídeo oculto salta a él; gana la última petición, así va fluido en vídeos largos). Clic o arrastrar = ir al fotograma exacto, la imagen se actualiza en directo y la miniatura muestra el fotograma actual; si se estaba reproduciendo, sigue al soltar. Ajuste fino (como YouTube): al arrastrar, mantener **Mayúsculas** o alejar el puntero más de 40 px por encima / debajo de la barra → 6 px = 1 fotograma (la etiqueta dice «fino»). En vídeos de 2 min o más se marcan los minutos (etiquetas cada 1, 5 o 10 min según el espacio). Funciona en la pantalla completa de Vidosser y fuera; no en la pantalla completa nativa del vídeo. Lo que se hace sobre la barra no afecta al arrastre de fotogramas, volumen, zoom, clic de reproducir / pausa, doble clic ni miniaturas.
 
 ## Miniaturas de la galería (1.4.18)
 
@@ -146,7 +146,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.19.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.20.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

@@ -2520,17 +2520,28 @@
         const BAND = 34, NATIVE_BAR = 44, TIP_W = 192;
         let ui = null, cur = null, drag = null, prevV = null, prevBusy = false, prevWant = null, prevShown = null, lastF = null;
         const css = document.createElement("style");
+        // 1.4.20 look: one clean bar over the displayed picture (object-fit rect) - dark translucent track,
+        // hover preview segment, played part in the accent colour, A-B segment, round thumb; the thin
+        // progress line and the loop bar are hidden while it is shown (no stacked bars).
         css.textContent =
-            ".vidosser-seek{position:fixed;z-index:2147483646;cursor:pointer;touch-action:none;user-select:none}" +
-            ".vidosser-seek .vs-track{position:absolute;left:10px;right:10px;bottom:10px;height:5px;border-radius:3px;background:rgba(255,255,255,.28);transition:height .12s,bottom .12s}" +
-            ".vidosser-seek:hover .vs-track,.vidosser-seek.vs-drag .vs-track{height:10px;bottom:8px}" +
-            ".vidosser-seek .vs-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--color-accent,#f97316)}" +
-            ".vidosser-seek .vs-mark{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 3px #000}" +
-            ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;border-radius:6px;background:rgba(0,0,0,.85);" +
+            ".vidosser-seek{position:fixed;z-index:2147483646;cursor:pointer;touch-action:none;user-select:none;" +
+            "background:linear-gradient(to bottom,rgba(0,0,0,0),rgba(0,0,0,.38))}" +
+            ".vidosser-seek .vs-track{position:absolute;left:0;right:0;bottom:9px;height:4px;border-radius:2px;background:rgba(20,20,20,.55);" +
+            "box-shadow:0 0 0 1px rgba(255,255,255,.10);transition:height .1s,bottom .1s}" +
+            ".vidosser-seek:hover .vs-track,.vidosser-seek.vs-drag .vs-track{height:7px;bottom:8px}" +
+            ".vidosser-seek .vs-hov{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:2px;background:rgba(255,255,255,.32)}" +
+            ".vidosser-seek .vs-seg{position:absolute;top:0;bottom:0;background:rgba(255,176,0,.55);display:none}" +
+            ".vidosser-seek .vs-fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--color-accent,#f97316)}" +
+            ".vidosser-seek .vs-thumb{position:absolute;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;" +
+            "background:var(--color-accent,#f97316);box-shadow:0 0 0 2px #fff,0 1px 4px rgba(0,0,0,.6);transform:scale(0);transition:transform .1s}" +
+            ".vidosser-seek:hover .vs-thumb,.vidosser-seek.vs-drag .vs-thumb{transform:scale(1)}" +
+            ".vidosser-seek .vs-mark{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#fff;opacity:.9}" +
+            "html.vidosser-seek-on .vidosser-thin-progress,html.vidosser-seek-on .vidosser-loop-bar{visibility:hidden!important}" +
+            ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;border-radius:8px;background:rgba(15,15,15,.88);" +
             "box-shadow:0 4px 14px rgba(0,0,0,.5);color:#fff;font:600 13px/1.3 system-ui,'Segoe UI',sans-serif;text-align:center}" +
-            ".vidosser-seek-tip canvas{display:block;border-radius:4px;background:#111;margin-bottom:3px}" +
-            ".vidosser-seek .vs-tick{position:absolute;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.55)}" +
-            ".vidosser-seek .vs-tlabel{position:absolute;bottom:14px;transform:translateX(-50%);font:600 10px system-ui,sans-serif;color:#fff;" +
+            ".vidosser-seek-tip canvas{display:block;border-radius:5px;background:#111;margin-bottom:3px}" +
+            ".vidosser-seek .vs-tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.45)}" +
+            ".vidosser-seek .vs-tlabel{position:absolute;bottom:12px;transform:translateX(-50%);font:600 10px system-ui,sans-serif;color:#fff;" +
             "text-shadow:0 0 3px #000,0 0 2px #000;opacity:0;transition:opacity .12s;pointer-events:none;white-space:nowrap}" +
             ".vidosser-seek:hover .vs-tlabel,.vidosser-seek.vs-drag .vs-tlabel{opacity:.9}" +
             ".vidosser-seek-tip .vs-fine{color:#ffd166}";
@@ -2540,28 +2551,39 @@
             const root = document.createElement("div"); root.className = "vidosser-seek"; root.style.display = "none";
             const track = document.createElement("div"); track.className = "vs-track";
             const fill = document.createElement("div"); fill.className = "vs-fill";
+            const hov = document.createElement("div"); hov.className = "vs-hov";
+            const seg = document.createElement("div"); seg.className = "vs-seg";
+            const thumb = document.createElement("div"); thumb.className = "vs-thumb";
             const mark = document.createElement("div"); mark.className = "vs-mark"; mark.style.display = "none";
             const ticks = document.createElement("div"); ticks.className = "vs-ticks";
             ticks.style.cssText = "position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none";
-            track.append(fill, ticks, mark); root.append(track);
+            track.append(hov, seg, fill, ticks, mark, thumb); root.append(track);
             const tip = document.createElement("div"); tip.className = "vidosser-seek-tip"; tip.style.display = "none";
             const cv = document.createElement("canvas"); cv.width = TIP_W; cv.height = 108;
             const label = document.createElement("div");
             tip.append(cv, label);
-            ui = { root, track, fill, mark, tip, cv, label, ticks, tickKey: "" };
+            ui = { root, track, fill, hov, seg, thumb, mark, tip, cv, label, ticks, tickKey: "" };
         }
         const boxOf = v => { const Z = V.modules.zoom; if (Z && Z.box) return Z.box(v); const r = v.getBoundingClientRect(); return { L: r.left, T: r.top, R: r.right, B: r.bottom, w: r.width, h: r.height }; };
         const nativeBar = v => v.controls && core.fsElement() !== v;
         function zone(v) {                                           // bar rectangle (screen px)
             const b = boxOf(v);
-            let bottom = b.B - (nativeBar(v) ? NATIVE_BAR : 0);
+            // displayed picture (object-fit: contain): the bar spans the picture, not the letterboxed box;
+            // zoomed (> 1×) the picture covers the whole box
+            let pL = b.L, pR = b.R, pB = b.B;
+            const Z = V.modules.zoom, zoomed = Z && Z.level && Z.level(v) > 1;
+            if (!zoomed && v.videoWidth && v.videoHeight && b.w > 0 && b.h > 0) {
+                const k = Math.min(b.w / v.videoWidth, b.h / v.videoHeight), w = v.videoWidth * k, h = v.videoHeight * k;
+                pL = b.L + (b.w - w) / 2; pR = pL + w; pB = b.T + (b.h - h) / 2 + h;
+            }
+            let bottom = Math.min(pB, b.B - (nativeBar(v) ? NATIVE_BAR : 0));
             // gr.Video's own player bar (.controls next to the <video>, shown when not hidden): stay above it
             const wrap = v.parentElement && v.parentElement.parentElement;
             const gc = wrap && wrap.querySelector(":scope > .controls, :scope > * > .controls");
             if (gc) { const r = gc.getBoundingClientRect(); if (r.height > 0 && r.top < bottom && r.bottom > b.T) bottom = Math.min(bottom, r.top); }
             const fsr = core.fsElement() ? core.fsElement().getBoundingClientRect() : null;
             const B = fsr ? Math.min(bottom, fsr.bottom) : Math.min(bottom, window.innerHeight);
-            const L = Math.max(b.L, fsr ? fsr.left : 0), R = Math.min(b.R, fsr ? fsr.right : window.innerWidth);
+            const L = Math.max(pL, fsr ? fsr.left : 0), R = Math.min(pR, fsr ? fsr.right : window.innerWidth);
             return { L, R, T: B - BAND, B, w: R - L };
         }
         function usable(v) {
@@ -2573,7 +2595,7 @@
         }
         function frameAt(v, x) {
             const z = zone(v), info = core.getInfo(v), fps = info.fps || GEN.default_fps || 16;
-            const tl = z.L + 10, tw = Math.max(1, z.w - 20);
+            const tl = z.L, tw = Math.max(1, z.w);
             const frac = Math.max(0, Math.min(1, (x - tl) / tw));
             const last = core.lastFrameOf(v, info);
             const maxF = Number.isFinite(last) ? last : Math.max(0, Math.round(v.duration * fps) - 1);
@@ -2614,8 +2636,18 @@
             cur = v;
             const z = zone(v);
             Object.assign(ui.root.style, { display: "", left: z.L + "px", top: z.T + "px", width: z.w + "px", height: BAND + "px" });
-            ui.fill.style.width = (100 * Math.min(1, (v.currentTime || 0) / v.duration)) + "%";
-            drawTicks(v, z.w - 20);
+            document.documentElement.classList.add("vidosser-seek-on");
+            played(v);
+            drawTicks(v, z.w);
+            const L = V.modules.loop, sg = L && L.segment ? L.segment(v) : null, info = core.getInfo(v), last = core.lastFrameOf(v, info);
+            if (sg && Number.isFinite(sg.in) && Number.isFinite(sg.out) && Number.isFinite(last) && last > 0) {
+                const a = Math.min(sg.in, sg.out) / last, c = Math.max(sg.in, sg.out) / last;
+                Object.assign(ui.seg.style, { display: "block", left: 100 * a + "%", width: Math.max(0.3, 100 * (c - a)) + "%" });
+            } else ui.seg.style.display = "none";
+        }
+        function played(v, t) {
+            const pc = (100 * Math.min(1, Math.max(0, (t !== undefined ? t : v.currentTime || 0) / v.duration))) + "%";
+            ui.fill.style.width = pc; ui.thumb.style.left = pc;
         }
         // long videos (>= 2 min): a tick per minute, labels every minute (or every 5 / 10 when crowded)
         function drawTicks(v, width) {
@@ -2635,18 +2667,19 @@
         function hide() {
             if (!ui || drag) return;
             ui.root.style.display = "none"; ui.tip.style.display = "none"; ui.mark.style.display = "none"; cur = null; lastF = null;
+            document.documentElement.classList.remove("vidosser-seek-on");
         }
         function hover(v, x, forced) {
             const at = frameAt(v, x), z = zone(v), { last, fps } = at;
             const f = forced !== undefined ? Math.max(0, Math.min(last, forced)) : at.f, frac = last > 0 ? f / last : 0;
-            ui.mark.style.display = ""; ui.mark.style.left = (100 * frac) + "%";
+            ui.mark.style.display = ""; ui.mark.style.left = (100 * frac) + "%"; ui.hov.style.width = (100 * frac) + "%";
             ui.label.textContent = `${fmt(f / fps)} · ${i18n("frame", "fotograma")} ${f} / ${last}`;
             if (drag && drag.fine) { const s = document.createElement("span"); s.className = "vs-fine"; s.textContent = i18n(" · fine", " · fino"); ui.label.appendChild(s); }
             ui.tip.dataset.frame = f;
             ui.tip.style.display = "";
-            const tw = ui.cv.width + 8;
-            ui.tip.style.left = Math.max(z.L + 2, Math.min(z.R - tw - 2, x - tw / 2)) + "px";
-            ui.tip.style.top = (z.T - ui.cv.height - 34) + "px";
+            const tw = ui.cv.width + 8;                                 // inside the picture bounds
+            ui.tip.style.left = Math.max(z.L + 4, Math.min(z.R - tw - 4, x - tw / 2)) + "px";
+            ui.tip.style.top = (z.T - ui.cv.height - 30) + "px";
             if (f !== lastF) { lastF = f; preview(v, f, fps); }
             return { f, fps };
         }
@@ -2666,7 +2699,7 @@
             if (drag && drag.f === f) return;
             if (drag) drag.f = f;
             core.seekTo(v, timeOf(v, f, fps));
-            ui.fill.style.width = (100 * Math.min(1, timeOf(v, f, fps) / v.duration)) + "%";
+            played(v, timeOf(v, f, fps));
         }
         // events on the bar (forwarded by the core guard; nothing else sees them)
         V.seekbarEvent = e => {
@@ -2706,7 +2739,7 @@
         }, { passive: true });
         document.addEventListener("fullscreenchange", () => { drag = null; hide(); });
         window.addEventListener("blur", () => { if (!drag) hide(); });
-        setInterval(() => { if (cur && ui && !drag) { if (!usable(cur)) hide(); else ui.fill.style.width = (100 * Math.min(1, cur.currentTime / cur.duration)) + "%"; } }, 200);
+        setInterval(() => { if (cur && ui && !drag) { if (!usable(cur)) hide(); else played(cur); } }, 200);
         return { config: GEN, onSettings: () => { if (!on()) { drag = null; hide(); } }, shown: () => !!cur, zone: v => zone(v) };
     })(core, core.CFG);
 

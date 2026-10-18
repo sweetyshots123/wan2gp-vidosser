@@ -2,6 +2,12 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.20] - 2026-10-19
+### Fixed
+- Seek bar: in fullscreen with a picture narrower than the screen it spanned the whole container width while the thin progress line spanned the picture -> two stacked bars, preview at the far edge. The bar now spans the displayed picture (object-fit: contain rect; the whole box while zoomed) at its bottom, the thin progress line and the A-B loop line are hidden while it is shown (the A-B segment is drawn on it), and the preview is kept inside the picture. Hover time / frame = pointer position over the picture-wide bar (no inset).
+### Changed
+- New look: soft dark gradient, dark translucent track, lighter hover segment, played part in the accent colour, round thumb on hover / drag.
+
 ## [1.4.19] - 2026-10-18
 ### Added
 - Seek bar with frame preview (`general.seek_preview`, default on; «Barra de avance con vista previa de fotogramas»): Vidosser's own bar in the bottom band of the video (above the native bar or the gr.Video player bar when visible), thicker on hover, floating thumbnail of the frame under the pointer (hidden second `<video>`, latest-request-wins seeking) with `mm:ss.cc` and frame number; click / drag = frame-accurate seek with live picture (paused during the drag, resumes if it was playing); fine scrub with Shift or by moving > 40 px away vertically (6 px = 1 frame, relative); minute ticks / labels for videos ≥ 2 min. Container fullscreen and outside; not native video fullscreen. All pointer events on the bar are owned by it (guard registered before every other module), so drag scrub, volume, zoom pan / edge pan, play toggle, double-click fullscreen and thumbnails never react to it.
