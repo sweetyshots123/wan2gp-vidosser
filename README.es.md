@@ -1,6 +1,6 @@
 # Vidosser (plugin para Wan2GP / WanGP)
 
-*[English](README.md)* · Licencia MIT · versión 1.4.18
+*[English](README.md)* · Licencia MIT · versión 1.4.19
 
 **Vidosser** es una colección de herramientas para ver vídeos en WanGP. Irá creciendo con más herramientas. Por ahora incluye:
 
@@ -84,6 +84,10 @@ El botón de pantalla completa **de la barra de controles propia del navegador**
 - Sin barra: **clic** sobre el vídeo o **Espacio** = reproducir / pausar, y se puede arrastrar sobre **toda la imagen** para pasar fotogramas (sin la zona de 40 px).
 - «Barra de progreso fina (3 px)» (`show_thin_progress`, activada por defecto): una línea de 3 px, que no se puede pulsar, en el borde inferior de la imagen indica la posición mientras los controles están ocultos.
 
+## Barra de avance con vista previa (`seek_preview`, activada por defecto, 1.4.19)
+
+La barra de controles de Chrome no se puede ampliar (y está oculta a pantalla completa), así que Vidosser dibuja la suya: al llevar el ratón a la franja inferior del vídeo (justo encima de la barra nativa si se ve; abajo del todo a pantalla completa) aparece una barra que engorda bajo el puntero y una miniatura flotante con el fotograma de ese punto, su tiempo (`mm:ss.cc`) y su número (un segundo vídeo oculto salta a él; gana la última petición, así va fluido en vídeos largos). Clic o arrastrar = ir al fotograma exacto, la imagen se actualiza en directo y la miniatura muestra el fotograma actual; si se estaba reproduciendo, sigue al soltar. Ajuste fino (como YouTube): al arrastrar, mantener **Mayúsculas** o alejar el puntero más de 40 px por encima / debajo de la barra → 6 px = 1 fotograma (la etiqueta dice «fino»). En vídeos de 2 min o más se marcan los minutos (etiquetas cada 1, 5 o 10 min según el espacio). Funciona en la pantalla completa de Vidosser y fuera; no en la pantalla completa nativa del vídeo. Lo que se hace sobre la barra no afecta al arrastre de fotogramas, volumen, zoom, clic de reproducir / pausa, doble clic ni miniaturas.
+
 ## Miniaturas de la galería (1.4.18)
 
 La miniatura del vídeo actual se resalta (borde blanco de 3 px, halo de color, algo más grande) en la tira bajo el reproductor y en la cuadrícula completa que aparece al cerrar la vista previa (Esc / ✕), dentro y fuera de pantalla completa; sigue a los clics, E / R, ◀ ▶ y los vídeos nuevos. Gradio 5.29 centra la tira dentro de una caja con barra de desplazamiento oculta, así que con muchos vídeos los más antiguos quedaban cortados a la izquierda y no se podían alcanzar: ahora se centra mientras cabe y se alinea a la izquierda (desplazable) cuando no; la rueda del ratón sobre la tira la desplaza de lado (solo si no cabe), la miniatura actual se mantiene visible y unos botones ◀ ▶ en sus extremos van al vídeo anterior / siguiente (como E / R, también a pantalla completa). Los clics en miniaturas funcionan igual.
@@ -142,7 +146,7 @@ git clone https://github.com/sweetyshots123/wan2gp-vidosser.git
 ```
 Luego activa **Vidosser** en la pestaña Plugins y reinicia WanGP.
 
-**Opción C, zip:** descarga `wan2gp-vidosser-1.4.18.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
+**Opción C, zip:** descarga `wan2gp-vidosser-1.4.19.zip` de la página de *Releases* y descomprímelo en `Wan2GP/plugins/`, de modo que quede `Wan2GP/plugins/wan2gp-vidosser/plugin.py`. Luego actívalo en la pestaña Plugins y reinicia WanGP.
 
 La carpeta tiene que llamarse `wan2gp-vidosser`: las actualizaciones de Wan2GP (`git pull`) no tocan las carpetas `plugins/wan2gp-*`.
 

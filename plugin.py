@@ -47,7 +47,7 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.18"
+PLUGIN_VERSION = "1.4.19"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -286,6 +286,9 @@ _TEXT = {
     "err_gif_failed": ("ffmpeg failed: {error}", "ffmpeg falló: {error}"),
     "err_gif_folder": ("GIF folder must be inside the WanGP folder or its outputs: {folder}",
                        "La carpeta de GIFs debe estar dentro de la carpeta de WanGP o de sus salidas: {folder}"),
+    "seek_preview": ("Seek bar with frame preview (hover the bottom of the video)", "Barra de avance con vista previa de fotogramas (pasa el ratón por la parte inferior del vídeo)"),
+    "seek_preview_info": ("Shows the frame, time and frame number under the pointer; click or drag = frame-accurate seek. Also in fullscreen.",
+                          "Muestra el fotograma, el tiempo y el número de fotograma bajo el puntero; clic o arrastrar = ir al fotograma exacto. También a pantalla completa."),
     "sec_overlay": ("### Overlay and fullscreen", "### Indicador y pantalla completa"),
     "show_overlay": ("Show overlay on the video", "Mostrar indicador sobre el vídeo"),
     "container_fs": ("Video fullscreen with overlays and messages", "Pantalla completa del vídeo con indicadores y mensajes"),
@@ -364,7 +367,8 @@ DEFAULT_SETTINGS = {
         "overlay_ms": 1200,         # how long the badge stays visible (ms)
         "container_fullscreen": True,
         "hide_controls": "fullscreen",  # hide the video control bars: "off" | "fullscreen" | "always"
-        "show_thin_progress": True,     # thin 3 px progress line at the bottom edge while controls are hidden  # video fullscreen (double-click / player button) on its container
+        "show_thin_progress": True,
+        "seek_preview": True,       # 1.4.19: Vidosser seek bar (bottom of the video): frame preview on hover, frame-accurate click / drag     # thin 3 px progress line at the bottom edge while controls are hidden  # video fullscreen (double-click / player button) on its container
                                        # instead of native <video> fullscreen, so overlays/toasts show
     },
     "keys": {                       # one key per action (case-insensitive, ignored while typing)
@@ -921,6 +925,8 @@ class VidosserPlugin(WAN2GPPlugin):
                                     label="hide_controls", info="hide_controls_info", choices=("choices", "hide_controls"))
                 thin_progress = loc(gr.Checkbox(label=T("thin_progress"), value=current("general", "show_thin_progress"), elem_id="vidosser_show_thin_progress"),
                                     label="thin_progress")
+                seek_preview = loc(gr.Checkbox(label=T("seek_preview"), value=current("general", "seek_preview"), elem_id="vidosser_seek_preview",
+                                               info=T("seek_preview_info")), label="seek_preview", info="seek_preview_info")
                 default_fps = loc(gr.Number(label=T("default_fps"), value=current("general", "default_fps"), minimum=1, elem_id="vidosser_default_fps"), label="default_fps")
         save_btn = loc(gr.Button(T("save_settings"), variant="primary", elem_id="vidosser_save_settings"), value="save_settings")
         status = gr.Markdown("", elem_id="vidosser_status")
@@ -936,7 +942,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed, gif_scale, gif_fps, gif_colors, gif_dither, gif_folder]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed, gif_scale, gif_fps, gif_colors, gif_dither, gif_folder, seek_preview]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -971,7 +977,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed", "gif_scale", "gif_fps", "gif_colors", "gif_dither", "gif_folder")
+                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed", "gif_scale", "gif_fps", "gif_colors", "gif_dither", "gif_folder", "seek_preview")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -991,7 +997,7 @@ class VidosserPlugin(WAN2GPPlugin):
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
                          wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", zoom_edge_pan=False, zoom_edge_speed=1400,
-                         gif_scale="original", gif_fps=0, gif_colors=256, gif_dither="sierra", gif_folder="", lang="en"):
+                         gif_scale="original", gif_fps=0, gif_colors=256, gif_dither="sierra", gif_folder="", seek_preview=True, lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -1072,7 +1078,7 @@ class VidosserPlugin(WAN2GPPlugin):
                                       middle_click_save=bool(middle_click), toast=bool(toast), toast_ms=int(round(toast_s * 1000)),
                                       flash=bool(flash), sound=bool(sound), sound_volume=sound_volume)
         settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs),
-                                   hide_controls=hide_controls, show_thin_progress=bool(thin_progress))
+                                   hide_controls=hide_controls, show_thin_progress=bool(thin_progress), seek_preview=bool(seek_preview))
         settings["loop"].update(loop_all=bool(loop_all), mode=loop_mode)
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
                                   drag_button=volume_button, drag_require_ctrl=bool(volume_ctrl), remember=bool(volume_remember))

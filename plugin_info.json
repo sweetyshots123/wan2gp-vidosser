@@ -1,7 +1,7 @@
 {
   "name": "Vidosser",
   "author": "sweetyshots123",
-  "version": "1.4.18",
+  "version": "1.4.19",
   "description": "Collection of video viewing tools for WanGP. Frame stepping with the mouse wheel (one notch = one frame, Shift = 10, Ctrl = short jump or playback speed; by default only in fullscreen), by dragging on the video (8 px = one frame, pointer locked while dragging) and with the keyboard (A/S = previous/next frame, Q/W = short jump), wrapping around from the last frame to the first and back (switchable); save the exact displayed frame at full resolution (D or middle click, PNG/JPG, save-as dialog or direct to a folder) with message, flash and shutter-sound feedback; fullscreen that keeps overlays visible (double-click toggles), control bar hidden in fullscreen with a thin progress line; loop all videos, L = loop this video, I/O/U = frame-accurate A-B segment loop, Boomerang loop mode (forwards then backwards, like a bounce; B = this video); drag vertically on the video to change the volume (up = louder; left or right button, optionally only with Ctrl held); in fullscreen, a newly generated video doesn't replace the one you are watching. P = video info panel (resolution, FPS, duration, frame, speed, volume, loop). Works on the output gallery and every video player. Settings in the 'Vidosser' tab. Interface in English or Spanish, following the browser language.",
   "type": [
     "extension"

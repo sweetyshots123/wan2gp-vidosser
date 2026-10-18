@@ -2,6 +2,10 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.19] - 2026-10-18
+### Added
+- Seek bar with frame preview (`general.seek_preview`, default on; «Barra de avance con vista previa de fotogramas»): Vidosser's own bar in the bottom band of the video (above the native bar when visible), thicker on hover, floating thumbnail of the frame under the pointer (hidden second `<video>`, latest-request-wins seeking) with `mm:ss.cc` and frame number; click / drag = frame-accurate seek with live picture (paused during the drag, resumes if it was playing); fine scrub with Shift or by moving > 40 px away vertically (6 px = 1 frame, relative); minute ticks / labels for videos ≥ 2 min. Container fullscreen and outside; not native video fullscreen. All pointer events on the bar are owned by it (guard registered before every other module), so drag scrub, volume, zoom pan / edge pan, play toggle, double-click fullscreen and thumbnails never react to it.
+
 ## [1.4.18] - 2026-10-17
 ### Added
 - Gallery: the current video's thumbnail is clearly highlighted (3 px white outline, accent glow, scale 1.12) in the preview strip and in the full grid (Gradio's grid marks nothing, so Vidosser marks the video last shown in the preview), in and out of container fullscreen; follows click, E / R, new videos.

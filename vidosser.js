@@ -675,6 +675,17 @@
             const v = videoAtPoint(e.clientX, e.clientY);
             if (v) lastVideo = v;                                         // hover / click = interaction
         };
+        // 1.4.19: Vidosser's seek bar (module seekbar) owns every pointer / mouse event that lands on it:
+        // registered first, so no other module (drag scrub, volume, zoom pan, play toggle, double-click
+        // fullscreen, middle click) ever sees them.
+        for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu"]) {
+            window.addEventListener(type, e => {
+                const t = e.target;
+                if (!(t instanceof Element) || !t.closest(".vidosser-seek")) return;
+                if (typeof V.seekbarEvent === "function") V.seekbarEvent(e);
+                e.stopImmediatePropagation();
+            }, { capture: true, passive: false });
+        }
         window.addEventListener("pointermove", trackPointer, { capture: true, passive: true });
         window.addEventListener("pointerdown", trackPointer, { capture: true, passive: true });
         document.documentElement.addEventListener("pointerleave", () => { pointer = null; });
@@ -703,6 +714,7 @@
         container_fullscreen: true, // video fullscreen on its container (overlays/toasts visible) instead of native
         hide_controls: "fullscreen", // hide video control bars: "off" | "fullscreen" | "always"
         show_thin_progress: true,   // 3 px progress line at the bottom edge while the controls are hidden
+        seek_preview: true,         // 1.4.19: own seek bar at the bottom of the video, frame preview on hover, frame-accurate drag
     }, SETTINGS.general || {}), Object.assign({
         enabled: true,            // keyboard shortcuts on/off
         next_frame: "s",
@@ -2493,6 +2505,207 @@
     }, SETTINGS.new_video || {}));
 
     // =======================================================================
+    // MODULE seekbar (1.4.19, general.seek_preview, default on) - Chrome's native control bar lives in a
+    // closed shadow DOM (no hover hook, no frame preview) and is hidden in fullscreen by hide_controls,
+    // so Vidosser draws its own seek bar: it appears when the pointer is in the bottom band of the video
+    // (just above the native bar when that one is visible), grows on hover, and shows a floating preview
+    // of the frame under the pointer (a hidden second <video> seeked to that frame) with mm:ss.cc and the
+    // frame number. Click / drag = frame-accurate scrubbing (snaps to frames, main video updated live,
+    // label follows; playback resumes after the drag if it was playing). In container fullscreen and
+    // outside; not in the browser's native <video> fullscreen (nothing can be drawn over it).
+    // Every event on the bar is owned by it (core guard), so drag scrub / volume / zoom / thumbnails /
+    // double-click never react to it.
+    // =======================================================================
+    V.modules.seekbar = (function (core, GEN) {
+        const BAND = 34, NATIVE_BAR = 44, TIP_W = 192;
+        let ui = null, cur = null, drag = null, prevV = null, prevBusy = false, prevWant = null, prevShown = null, lastF = null;
+        const css = document.createElement("style");
+        css.textContent =
+            ".vidosser-seek{position:fixed;z-index:2147483646;cursor:pointer;touch-action:none;user-select:none}" +
+            ".vidosser-seek .vs-track{position:absolute;left:10px;right:10px;bottom:10px;height:5px;border-radius:3px;background:rgba(255,255,255,.28);transition:height .12s,bottom .12s}" +
+            ".vidosser-seek:hover .vs-track,.vidosser-seek.vs-drag .vs-track{height:10px;bottom:8px}" +
+            ".vidosser-seek .vs-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--color-accent,#f97316)}" +
+            ".vidosser-seek .vs-mark{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 3px #000}" +
+            ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;border-radius:6px;background:rgba(0,0,0,.85);" +
+            "box-shadow:0 4px 14px rgba(0,0,0,.5);color:#fff;font:600 13px/1.3 system-ui,'Segoe UI',sans-serif;text-align:center}" +
+            ".vidosser-seek-tip canvas{display:block;border-radius:4px;background:#111;margin-bottom:3px}" +
+            ".vidosser-seek .vs-tick{position:absolute;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.55)}" +
+            ".vidosser-seek .vs-tlabel{position:absolute;bottom:14px;transform:translateX(-50%);font:600 10px system-ui,sans-serif;color:#fff;" +
+            "text-shadow:0 0 3px #000,0 0 2px #000;opacity:0;transition:opacity .12s;pointer-events:none;white-space:nowrap}" +
+            ".vidosser-seek:hover .vs-tlabel,.vidosser-seek.vs-drag .vs-tlabel{opacity:.9}" +
+            ".vidosser-seek-tip .vs-fine{color:#ffd166}";
+        (document.head || document.documentElement).appendChild(css);
+        const on = () => GEN.seek_preview !== false;
+        function build() {
+            const root = document.createElement("div"); root.className = "vidosser-seek"; root.style.display = "none";
+            const track = document.createElement("div"); track.className = "vs-track";
+            const fill = document.createElement("div"); fill.className = "vs-fill";
+            const mark = document.createElement("div"); mark.className = "vs-mark"; mark.style.display = "none";
+            const ticks = document.createElement("div"); ticks.className = "vs-ticks";
+            ticks.style.cssText = "position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none";
+            track.append(fill, ticks, mark); root.append(track);
+            const tip = document.createElement("div"); tip.className = "vidosser-seek-tip"; tip.style.display = "none";
+            const cv = document.createElement("canvas"); cv.width = TIP_W; cv.height = 108;
+            const label = document.createElement("div");
+            tip.append(cv, label);
+            ui = { root, track, fill, mark, tip, cv, label, ticks, tickKey: "" };
+        }
+        const boxOf = v => { const Z = V.modules.zoom; if (Z && Z.box) return Z.box(v); const r = v.getBoundingClientRect(); return { L: r.left, T: r.top, R: r.right, B: r.bottom, w: r.width, h: r.height }; };
+        const nativeBar = v => v.controls && core.fsElement() !== v;
+        function zone(v) {                                           // bar rectangle (screen px)
+            const b = boxOf(v), bottom = b.B - (nativeBar(v) ? NATIVE_BAR : 0);
+            const fsr = core.fsElement() ? core.fsElement().getBoundingClientRect() : null;
+            const B = fsr ? Math.min(bottom, fsr.bottom) : Math.min(bottom, window.innerHeight);
+            const L = Math.max(b.L, fsr ? fsr.left : 0), R = Math.min(b.R, fsr ? fsr.right : window.innerWidth);
+            return { L, R, T: B - BAND, B, w: R - L };
+        }
+        function usable(v) {
+            if (!on() || !v || !v.isConnected || v.closest(".thumbnail-item")) return false;
+            const fs = core.fsElement();
+            if (fs instanceof HTMLVideoElement) return false;            // native video fullscreen: nothing can be drawn
+            if (fs && !fs.contains(v)) return false;
+            return Number.isFinite(v.duration) && v.duration > 0 && core.eligible(v, fs);
+        }
+        function frameAt(v, x) {
+            const z = zone(v), info = core.getInfo(v), fps = info.fps || GEN.default_fps || 16;
+            const tl = z.L + 10, tw = Math.max(1, z.w - 20);
+            const frac = Math.max(0, Math.min(1, (x - tl) / tw));
+            const last = core.lastFrameOf(v, info);
+            const maxF = Number.isFinite(last) ? last : Math.max(0, Math.round(v.duration * fps) - 1);
+            const f = Math.max(0, Math.min(maxF, Math.floor(frac * v.duration * fps + 1e-6)));
+            return { f, last: maxF, fps, frac: maxF > 0 ? f / maxF : 0 };
+        }
+        const fmt = t => { const m = Math.floor(t / 60), sec = t - m * 60; return `${String(m).padStart(2, "0")}:${sec.toFixed(2).padStart(5, "0")}`; };
+        const timeOf = (v, f, fps) => { let t = (f + 0.5) / fps; const d = v.duration; return Number.isFinite(d) && d > 0 ? Math.min(t, Math.max(0, d - 0.001)) : t; };
+        function preview(v, f, fps) {                                // hidden second <video>, latest request wins
+            const src = v.currentSrc || v.src;
+            if (!prevV || prevV.dataset.src !== src) {
+                if (prevV) { prevV.removeAttribute("src"); prevV.load(); }
+                prevV = document.createElement("video");
+                prevV.muted = true; prevV.preload = "auto"; prevV.playsInline = true; prevV.dataset.src = src;
+                prevV.addEventListener("seeked", () => {
+                    prevBusy = false; prevShown = prevV.dataset.want;
+                    if (ui && prevV.videoWidth) {
+                        const h = Math.round(TIP_W * prevV.videoHeight / prevV.videoWidth);
+                        if (ui.cv.height !== h) ui.cv.height = Math.min(240, Math.max(40, h));
+                        ui.cv.getContext("2d").drawImage(prevV, 0, 0, ui.cv.width, ui.cv.height);
+                        ui.cv.dataset.frame = prevShown;
+                    }
+                    if (prevWant !== null && String(prevWant.f) !== prevShown) { const w = prevWant; prevWant = null; preview(w.v, w.f, w.fps); }
+                });
+                prevV.addEventListener("loadeddata", () => { if (prevWant) { const w = prevWant; prevWant = null; prevBusy = false; preview(w.v, w.f, w.fps); } }, { once: true });
+                prevV.src = src;
+                prevWant = { v, f, fps }; prevBusy = true; return;
+            }
+            if (prevBusy || prevV.readyState < 1) { prevWant = { v, f, fps }; return; }
+            if (prevShown === String(f)) return;
+            prevBusy = true; prevV.dataset.want = String(f);
+            prevV.currentTime = timeOf(v, f, fps);
+        }
+        function show(v) {
+            if (!ui) build();
+            const host = core.fsElement() || document.body;
+            if (ui.root.parentNode !== host) { host.appendChild(ui.root); host.appendChild(ui.tip); }
+            cur = v;
+            const z = zone(v);
+            Object.assign(ui.root.style, { display: "", left: z.L + "px", top: z.T + "px", width: z.w + "px", height: BAND + "px" });
+            ui.fill.style.width = (100 * Math.min(1, (v.currentTime || 0) / v.duration)) + "%";
+            drawTicks(v, z.w - 20);
+        }
+        // long videos (>= 2 min): a tick per minute, labels every minute (or every 5 / 10 when crowded)
+        function drawTicks(v, width) {
+            const d = v.duration, key = `${d}|${Math.round(width)}`;
+            if (ui.tickKey === key) return;
+            ui.tickKey = key; ui.ticks.textContent = "";
+            if (!(d >= 120)) return;
+            const mins = Math.floor(d / 60), px = width * 60 / d;
+            const every = px >= 34 ? 1 : px * 5 >= 34 ? 5 : 10;
+            for (let m = 1; m <= mins; m++) {
+                if (m * 60 >= d) break;
+                const left = (100 * m * 60 / d) + "%";
+                if (px >= 4 || m % every === 0) { const t = document.createElement("div"); t.className = "vs-tick"; t.style.left = left; ui.ticks.appendChild(t); }
+                if (m % every === 0) { const l = document.createElement("div"); l.className = "vs-tlabel"; l.style.left = left; l.textContent = m + ":00"; ui.ticks.appendChild(l); }
+            }
+        }
+        function hide() {
+            if (!ui || drag) return;
+            ui.root.style.display = "none"; ui.tip.style.display = "none"; ui.mark.style.display = "none"; cur = null; lastF = null;
+        }
+        function hover(v, x, forced) {
+            const at = frameAt(v, x), z = zone(v), { last, fps } = at;
+            const f = forced !== undefined ? Math.max(0, Math.min(last, forced)) : at.f, frac = last > 0 ? f / last : 0;
+            ui.mark.style.display = ""; ui.mark.style.left = (100 * frac) + "%";
+            ui.label.textContent = `${fmt(f / fps)} · ${i18n("frame", "fotograma")} ${f} / ${last}`;
+            if (drag && drag.fine) { const s = document.createElement("span"); s.className = "vs-fine"; s.textContent = i18n(" · fine", " · fino"); ui.label.appendChild(s); }
+            ui.tip.dataset.frame = f;
+            ui.tip.style.display = "";
+            const tw = ui.cv.width + 8;
+            ui.tip.style.left = Math.max(z.L + 2, Math.min(z.R - tw - 2, x - tw / 2)) + "px";
+            ui.tip.style.top = (z.T - ui.cv.height - 34) + "px";
+            if (f !== lastF) { lastF = f; preview(v, f, fps); }
+            return { f, fps };
+        }
+        // fine scrub (YouTube-like): while dragging, hold Shift or move the pointer more than FINE_PX above /
+        // below the bar -> relative mode, FINE_STEP px of horizontal movement = 1 frame from where it started
+        const FINE_PX = 40, FINE_STEP = 6;
+        function seekTo(v, x, e) {
+            let forced;
+            if (drag && e) {
+                const z = zone(v), away = e.clientY < z.T - FINE_PX || e.clientY > z.B + FINE_PX;
+                const fine = !!e.shiftKey || away;
+                if (fine && !drag.fine) { drag.fine = { x, f: drag.f !== null ? drag.f : frameAt(v, x).f }; }
+                else if (!fine) drag.fine = null;
+                if (drag.fine) forced = drag.fine.f + Math.round((x - drag.fine.x) / FINE_STEP);
+            }
+            const { f, fps } = hover(v, x, forced);
+            if (drag && drag.f === f) return;
+            if (drag) drag.f = f;
+            core.seekTo(v, timeOf(v, f, fps));
+            ui.fill.style.width = (100 * Math.min(1, timeOf(v, f, fps) / v.duration)) + "%";
+        }
+        // events on the bar (forwarded by the core guard; nothing else sees them)
+        V.seekbarEvent = e => {
+            const v = drag ? drag.v : cur;
+            if (!v || !ui) return;
+            if (e.type === "pointerdown") {
+                if (e.button !== 0) { e.preventDefault(); return; }
+                e.preventDefault();
+                core.beforeUserAction(v, "seek");
+                drag = { v, id: e.pointerId, wasPlaying: !v.paused, f: null };
+                if (!v.paused) v.pause();
+                ui.root.classList.add("vs-drag");
+                try { ui.root.setPointerCapture(e.pointerId); } catch (_) {}
+                seekTo(v, e.clientX, e);
+            } else if (e.type === "pointermove") {
+                if (drag) seekTo(v, e.clientX, e); else { show(v); hover(v, e.clientX); }
+            } else if (e.type === "pointerup" || e.type === "pointercancel") {
+                if (!drag) return;
+                const d = drag; drag = null; ui.root.classList.remove("vs-drag");
+                try { ui.root.releasePointerCapture(e.pointerId); } catch (_) {}
+                if (d.wasPlaying) core.settled(v).then(() => v.play().catch(() => {}));
+                const inside = (() => { const z = zone(v); return e.clientX >= z.L && e.clientX <= z.R && e.clientY >= z.T && e.clientY <= z.B; })();
+                if (!inside) hide();
+            } else if (e.type === "contextmenu" || e.type === "dblclick" || e.type === "mousedown") {
+                e.preventDefault();
+            }
+        };
+        // show / hide from the pointer position anywhere (the bar itself is handled above)
+        document.addEventListener("pointermove", e => {
+            if (drag || e.pointerType === "touch") return;
+            if (!on()) { hide(); return; }
+            const v = core.videoAtPoint(e.clientX, e.clientY);
+            if (!usable(v)) { hide(); return; }
+            const z = zone(v);
+            if (e.clientX >= z.L && e.clientX <= z.R && e.clientY >= z.T && e.clientY <= z.B) { show(v); hover(v, e.clientX); }
+            else hide();
+        }, { passive: true });
+        document.addEventListener("fullscreenchange", () => { drag = null; hide(); });
+        window.addEventListener("blur", () => { if (!drag) hide(); });
+        setInterval(() => { if (cur && ui && !drag) { if (!usable(cur)) hide(); else ui.fill.style.width = (100 * Math.min(1, cur.currentTime / cur.duration)) + "%"; } }, 200);
+        return { config: GEN, onSettings: () => { if (!on()) { drag = null; hide(); } }, shown: () => !!cur, zone: v => zone(v) };
+    })(core, core.CFG);
+
+    // =======================================================================
     // MODULE strip (1.4.18) - gallery thumbnails: the selected / current video is clearly highlighted
     // (3 px white outline + accent glow, slightly larger) in the preview strip and in the full grid
     // (Esc / close of the preview), in and out of container fullscreen. Gradio 5.29 keeps the class
@@ -2796,6 +3009,7 @@
         function tick(now) {
             raf = 0;
             if (FS.zoom_edge_pan !== true || !ptr) return;
+            if (V.modules.seekbar && V.modules.seekbar.shown()) return;   // 1.4.19: on the seek bar -> no edge pan
             const v = ptr.v, z = st.get(v);
             if (!z || !v.isConnected || document.hidden) return;
             const fs = core.fsElement();
@@ -2828,7 +3042,7 @@
         }, { capture: true, passive: true });
         document.addEventListener("mouseout", e => { if (!e.relatedTarget) ptr = null; });   // left the window
         window.addEventListener("blur", () => { ptr = null; });
-        return { level, possible, wheel, pan, reset, resetAll, clipRect };
+        return { level, possible, wheel, pan, reset, resetAll, clipRect, box };
     })(core, V.config.frame_step);
 
     // =======================================================================
