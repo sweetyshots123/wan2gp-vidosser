@@ -648,6 +648,12 @@
         function bridge(payload, timeoutMs = 120000) {
             const run = () => new Promise((resolve, reject) => {
                 const el = bridgeElements();
+                if (!el && window.__VIDOSSER_HTTP_BRIDGE) {   // 1.4.24: embedded on another page -> same handler over HTTP
+                    fetch(window.__VIDOSSER_HTTP_BRIDGE, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                                                           body: JSON.stringify(Object.assign({ lang: LANG }, payload)) })
+                        .then(r => r.json()).then(resolve, err => reject(err));
+                    return;
+                }
                 if (!el) { const err = new Error(i18n("Vidosser bridge not available", "puente de Vidosser no disponible")); err.bridgeMissing = true; reject(err); return; }
                 const id = `${Date.now()}-${++seq}`;
                 const timer = setTimeout(() => { pending.delete(id); reject(new Error(i18n("timeout", "tiempo de espera agotado"))); }, timeoutMs);
@@ -714,6 +720,7 @@
         container_fullscreen: true, // video fullscreen on its container (overlays/toasts visible) instead of native
         hide_controls: "fullscreen", // hide video control bars: "off" | "fullscreen" | "always"
         show_thin_progress: true,   // 3 px progress line at the bottom edge while the controls are hidden
+        dblclick_tolerance: 10,     // 1.4.23: px a double-click may move (between / during the clicks); 0 = native dblclick only
         seek_preview: true,         // 1.4.19: own seek bar at the bottom of the video, frame preview on hover, frame-accurate drag
     }, SETTINGS.general || {}), Object.assign({
         enabled: true,            // keyboard shortcuts on/off
@@ -1066,7 +1073,7 @@
         // as the lock starts, buttons = 0 while the button is held), which slammed the volume
         // to 0 % / 100 % or ended the drag at once. The screen gives far more than 0..100 %.
         const VOL = V.modules.volume;
-        const DRAG_THRESHOLD = 4, CONTROLS_PX = 40;
+        const DRAG_THRESHOLD = 4, CONTROLS_PX = 40, AXIS_PX = 8;
         let drag = null, swallowClickUntil = 0, swallowClickOn = null, swallowMenuUntil = 0;
         const dragButton = () => String(CFG.drag_button || "left").toLowerCase() === "right" ? 2 : 0;
         const volModifier = () => (VOL && VOL.config.drag_require_ctrl === true ? "ctrl" : "");   // 1.4.7: Ctrl only for now
@@ -1185,7 +1192,21 @@
                 if (drag.scrub && Z && Z.level(drag.v) > 1 && wantPan && (drag.zctrl || !drag.modVol) && !(drag.modVol && ady > adx)) {   // 1.4.11: zoomed -> the scrub button pans
                     drag.axis = "pan"; drag.active = true; drag.px = 0; drag.py = 0;
                     capture(drag);
+                } else if (CFG.zoom_drag_vpan !== false && drag.scrub && !wantPan && !drag.zctrl && !drag.modVol && drag.type !== "touch" && Z && Z.level(drag.v) > 1) {
+                    // 1.4.22 (frame_step.zoom_drag_vpan): zoomed in "scrub" mode, the axis is locked after AXIS_PX:
+                    // mostly horizontal = frames as before, mostly vertical = move the picture up / down only
+                    // (follows the pointer, clamped by the zoom module; free pan stays on Ctrl + drag). Also
+                    // wins over a volume drag on the same button without Ctrl (no volume change while zoomed).
+                    if (Math.max(adx, ady) < AXIS_PX) return;
+                    if (ady > adx) { drag.axis = "vpan"; drag.active = true; drag.px = 0; drag.py = 0; capture(drag); }
                 }
+            }
+            if (drag.axis === "vpan") {
+                e.preventDefault();
+                const ddy = drag.dy - drag.py;                              // dy: clientY, or movementY sums under Pointer Lock
+                drag.py += ddy;
+                if (ddy) V.modules.zoom.pan(drag.v, 0, ddy);
+                return;
             }
             if (drag.axis === "pan") {
                 e.preventDefault();
@@ -1335,6 +1356,7 @@
         wheel_jump_modifier: "ctrl",  // modifier + wheel key: ctrl | alt | shift | meta | none
         zoom_edge_speed: 1400,        // edge pan px/s at full depth (1.4.16)
         zoom_edge_pan: false,         // zoomed: scroll while the pointer is near an edge (1.4.14)
+        zoom_drag_vpan: true,         // zoomed + zoom_drag "scrub": a mostly vertical drag pans up / down (1.4.22)
         zoom_drag: "pan",             // zoomed: scrub-button drag "pan" | "scrub" (1.4.12)
         wheel_action: "frames",       // plain wheel: "frames" | "zoom" (1.4.11)
         wheel_mod_action: "jump",     // what the modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate)
@@ -1416,6 +1438,13 @@
                 let res;
                 try { res = await core.bridge({ action: "save_frame", url: video.currentSrc, time: t, frame: Math.floor(t * info.fps + 1e-6), mode }); }
                 catch (err) { res = { ok: false, error: err.message, bridgeMissing: !!err.bridgeMissing }; }
+                if (res.ok && res.library) {   // 1.4.25: a library video (e.g. Reference Library): the frame went into that library
+                    const msg = res.message || `${i18n("Frame saved to the library", "Fotograma guardado en la librería")}: ${res.name}`;
+                    core.showOverlay(video, msg);
+                    feedback(video, "ok", msg);
+                    try { window.dispatchEvent(new CustomEvent("vidosser:frame-saved", { detail: res })); } catch (e) {}
+                    return res;
+                }
                 if (mode === "direct") {
                     core.showOverlay(video, res.ok ? `${i18n("Saved", "Guardado")}: ${res.path}` : `${i18n("Save failed", "Error al guardar")}: ${res.error}`);
                     if (res.ok) feedback(video, "ok", `${i18n("Frame saved", "Fotograma guardado")} (frame ${res.frame}): ${res.path}`);
@@ -1557,7 +1586,7 @@
         style.textContent =
             `.${CLS}:fullscreen{background:#000!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;` +
             `display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:center!important;margin:0!important;}` +
-            `.${CLS}:fullscreen>*:not(.controls){flex:1 1 auto!important;min-height:0!important;width:100%!important;max-height:none!important;` +
+            `.${CLS}:fullscreen>*:not(.controls):not([class^="vidosser-"]){flex:1 1 auto!important;min-height:0!important;width:100%!important;max-height:none!important;` +
             `display:flex!important;align-items:center!important;justify-content:center!important;}` +
             `.${CLS}:fullscreen video{width:100%!important;height:100%!important;max-width:100vw!important;max-height:100vh!important;object-fit:contain!important;}`;
         (document.head || document.documentElement).appendChild(style);
@@ -1609,6 +1638,8 @@
             if (e.button !== 0) return;
             const v = e.target;
             if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) return;
+            // 1.4.23: this press already completed a double-click (pointer-level detection below)
+            if (performance.now() - manualAt < 300) { e.preventDefault(); e.stopPropagation(); return; }
             if (e.detail === 1) { firstPress = { v, paused: v.paused, t: performance.now() }; return; }
             if (e.detail !== 2) return;
             const fs = core.fsElement();
@@ -1640,6 +1671,70 @@
             const fs = core.fsElement();
             for (const el of document.querySelectorAll("." + CLS)) if (el !== fs) el.classList.remove(CLS);
         });
+
+        // 1.4.23: double-click detected at the pointer level (general.dblclick_tolerance, default 10 px).
+        // The browser's own double-click (mousedown detail 2 / dblclick) is lost when the mouse moves
+        // a few px between or during the two clicks: Windows resets the click count past ~4 px, and a
+        // move past the drag dead zone (4 px) turns the first click into a frame_step drag, whose release
+        // made the 2nd press "a click after a scrub". Here: left button, 2nd press within DBL_MS of the
+        // 1st release, the 1st press moved at most `tol` px and the 2nd press lands within `tol` px of the
+        // 1st one -> toggle Vidosser's fullscreen on that 2nd pointerdown (still a user gesture). The
+        // drag itself is untouched (same dead zone, a 30 px drag scrubs as before); if that tiny move
+        // stepped frames, the time from before the 1st press is restored, and the play state too.
+        // The native mousedown detail 2 / dblclick of the same gesture are swallowed (no double toggle).
+        const DBL_MS = 400;
+        let dc = null, manualAt = -1e9, undoTimers = [], undo = null;
+        // play state first (the 2nd click's own play toggle has run by then), then the frame
+        function finishManual() {
+            restorePlay();
+            const u = undo; undo = null;
+            if (!u) return;
+            const back = () => { if (u.v.isConnected && Math.abs(u.v.currentTime - u.time) > 1e-4) core.seekTo(u.v, u.time); };
+            undoTimers.forEach(clearTimeout); undoTimers = [0, 150, 400].map(ms => setTimeout(back, ms));
+        }
+        window.addEventListener("click", e => {
+            if (performance.now() - manualAt < 600 && e.target instanceof HTMLVideoElement) {
+                e.preventDefault();                                      // the completing click never toggles play
+                clearTimeout(restoreTimer); restoreTimer = setTimeout(finishManual, 30);
+            }
+        }, true);
+        const tol = () => { const n = Number(GEN.dblclick_tolerance); return Number.isFinite(n) ? Math.max(0, Math.min(30, n)) : 10; };
+        window.addEventListener("pointerdown", e => {
+            if (e.pointerType !== "mouse" || e.button !== 0 || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) { dc = null; return; }
+            const v = e.target, now = performance.now(), T = tol();
+            if (!(v instanceof HTMLVideoElement) || !core.eligible(v, core.fsElement())) { dc = null; return; }
+            const first = dc;
+            if (T > 0 && first && first.v === v && first.up && now - first.upAt <= DBL_MS && first.max <= T &&
+                Math.hypot(e.clientX - first.x, e.clientY - first.y) <= T) {
+                const fs = core.fsElement(), inFs = !!(fs && (fs === v || fs.contains(v)));
+                if (inFs || enabled(v)) {
+                    dc = null; manualAt = now; swallowDblUntil = now + 1000;
+                    if (inFs) document.exitFullscreen().catch(() => {});
+                    else enter(v).catch(() => {});
+                    // the tiny move was a drag that stepped frames: back to the frame before the 1st press
+                    undo = (first.paused || first.stepped || (core.dragEndedAt || 0) >= first.downAt) ? { v, time: first.time } : null;   // paused: exact frame back (the 1st click may have played a moment)
+                    firstPress = { v, paused: first.paused, t: first.downAt };
+                    clearTimeout(restoreTimer); restoreTimer = setTimeout(finishManual, 600);   // fallback: no click came
+                    return;
+                }
+            }
+            dc = { v, id: e.pointerId, x: e.clientX, y: e.clientY, ox: 0, oy: 0, downAt: now, up: false, upAt: 0, max: 0, moves: 0,
+                   time: v.currentTime, paused: v.paused, stepped: false };
+        }, true);
+        window.addEventListener("pointermove", e => {
+            if (!dc || dc.up || e.pointerId !== dc.id) return;
+            if (document.pointerLockElement) {                           // clientX/Y frozen under the scrub's Pointer Lock
+                const mx = e.movementX || 0, my = e.movementY || 0;
+                if (!(dc.moves < 3 && Math.max(Math.abs(mx), Math.abs(my)) > 60)) { dc.ox += mx; dc.oy += my; }   // skip the re-centring spike
+                dc.moves++;
+            } else { dc.ox = e.clientX - dc.x; dc.oy = e.clientY - dc.y; }
+            dc.max = Math.max(dc.max, Math.hypot(dc.ox, dc.oy));
+            if (Math.abs(dc.v.currentTime - dc.time) > 1e-4 && dc.v.paused) dc.stepped = true;
+        }, { capture: true, passive: true });
+        window.addEventListener("pointerup", e => {
+            if (!dc || dc.up || e.pointerId !== dc.id) return;
+            dc.up = true; dc.upAt = performance.now();
+        }, true);
 
         // 1.4.10: Chrome's own <video> fullscreen sometimes won a double-click (no gallery thumbnails,
         // no Vidosser bars) and cannot be moved to the container afterwards (Chrome refuses a new
@@ -2517,7 +2612,7 @@
     // double-click never react to it.
     // =======================================================================
     V.modules.seekbar = (function (core, GEN) {
-        const BAND = 34, NATIVE_BAR = 44, TIP_W = 192;
+        const BAND = 34, NATIVE_BAR = 44, TIP_W = 192, TIP_H = 160;   // preview max size (aspect kept)
         let ui = null, cur = null, drag = null, prevV = null, prevBusy = false, prevWant = null, prevShown = null, lastF = null;
         const css = document.createElement("style");
         // 1.4.20 look: one clean bar over the displayed picture (object-fit rect) - dark translucent track,
@@ -2542,9 +2637,10 @@
             // Chrome's own timeline is replaced by ours (the native buttons / time row stays)
             "video.vidosser-seekbar::-webkit-media-controls-timeline{display:none!important}" +
             "html.vidosser-seek-on .vidosser-thin-progress,html.vidosser-seek-on .vidosser-loop-bar{visibility:hidden!important}" +
-            ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;border-radius:8px;background:rgba(15,15,15,.88);" +
+            ".vidosser-seek-tip{position:fixed;z-index:2147483647;pointer-events:none;padding:4px;box-sizing:content-box;width:auto;height:auto;flex:none;flex-direction:column;align-items:center;justify-content:flex-start;border-radius:8px;background:rgba(15,15,15,.88);" +
             "box-shadow:0 4px 14px rgba(0,0,0,.5);color:#fff;font:600 13px/1.3 system-ui,'Segoe UI',sans-serif;text-align:center}" +
-            ".vidosser-seek-tip canvas{display:block;border-radius:5px;background:#111;margin-bottom:3px}" +
+            ".vidosser-seek-tip canvas{display:block;border-radius:5px;background:#111;margin:0 auto 3px}" +
+            ".vidosser-seek-tip.vs-wait{visibility:hidden}" +
             ".vidosser-seek .vs-tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.45)}" +
             ".vidosser-seek .vs-tlabel{position:absolute;bottom:12px;transform:translateX(-50%);font:600 10px system-ui,sans-serif;color:#fff;" +
             "text-shadow:0 0 3px #000,0 0 2px #000;opacity:0;transition:opacity .12s;pointer-events:none;white-space:nowrap}" +
@@ -2564,13 +2660,20 @@
             ticks.style.cssText = "position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none";
             track.append(hov, seg, fill, ticks, mark, thumb); root.append(track);
             const tip = document.createElement("div"); tip.className = "vidosser-seek-tip"; tip.style.display = "none";
-            const cv = document.createElement("canvas"); cv.width = TIP_W; cv.height = 108;
+            const cv = document.createElement("canvas"); cv.width = TIP_W; cv.height = 108; cv.dataset.src = "";
             const label = document.createElement("div");
             tip.append(cv, label);
             ui = { root, track, fill, hov, seg, thumb, mark, tip, cv, label, ticks, tickKey: "" };
         }
         const boxOf = v => { const Z = V.modules.zoom; if (Z && Z.box) return Z.box(v); const r = v.getBoundingClientRect(); return { L: r.left, T: r.top, R: r.right, B: r.bottom, w: r.width, h: r.height }; };
         const nativeBar = v => v.controls && core.fsElement() !== v;
+        function picRect(v) {                                        // displayed picture (object-fit: contain) or the box when zoomed
+            const b = boxOf(v), Z = V.modules.zoom, zoomed = Z && Z.level && Z.level(v) > 1;
+            if (zoomed || !v.videoWidth || !v.videoHeight || !(b.w > 0) || !(b.h > 0)) return { L: b.L, T: b.T, R: b.R, B: b.B };
+            const k = Math.min(b.w / v.videoWidth, b.h / v.videoHeight), w = v.videoWidth * k, h = v.videoHeight * k;
+            const L = b.L + (b.w - w) / 2, T = b.T + (b.h - h) / 2;
+            return { L, T, R: L + w, B: T + h };
+        }
         function zone(v) {                                           // bar rectangle (screen px)
             const b = boxOf(v);
             // displayed picture (object-fit: contain): the bar spans the picture, not the letterboxed box;
@@ -2609,6 +2712,27 @@
         }
         const fmt = t => { const m = Math.floor(t / 60), sec = t - m * 60; return `${String(m).padStart(2, "0")}:${sec.toFixed(2).padStart(5, "0")}`; };
         const timeOf = (v, f, fps) => { let t = (f + 0.5) / fps; const d = v.duration; return Number.isFinite(d) && d > 0 ? Math.min(t, Math.max(0, d - 0.001)) : t; };
+        // 1.4.21: preview size from the video's aspect ratio within TIP_W x TIP_H (portrait no longer squashed)
+        function tipSize(vw, vh) {
+            const k = Math.min(TIP_W / vw, TIP_H / vh);
+            return { w: Math.max(24, Math.round(vw * k)), h: Math.max(24, Math.round(vh * k)) };
+        }
+        // place the tip above the bar at the hover x, clamped inside the displayed picture (and the screen);
+        // hidden (vs-wait) until a frame of THIS video has been drawn - never an empty / stale-size box
+        let tipX = 0;
+        function place() {
+            if (!ui || !cur || ui.tip.style.display === "none") return;
+            const v = cur, src = v.currentSrc || v.src, ready = ui.cv.dataset.src === src && ui.cv.dataset.frame !== undefined;
+            ui.tip.classList.toggle("vs-wait", !ready);
+            const z = zone(v), pic = picRect(v), r = ui.tip.getBoundingClientRect();
+            const tw = r.width || ui.cv.width + 8, th = r.height || ui.cv.height + 30;
+            const fsr = core.fsElement() ? core.fsElement().getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+            const lo = Math.max(pic.L, fsr.left) + 4, hi = Math.min(pic.R, fsr.right) - tw - 4;
+            const left = hi >= lo ? Math.max(lo, Math.min(hi, tipX - tw / 2))
+                                  : Math.max(fsr.left + 4, Math.min(fsr.right - tw - 4, (pic.L + pic.R - tw) / 2));   // picture narrower than the tip
+            const top = Math.max(Math.max(pic.T, fsr.top) + 4, z.T - th - 6);
+            ui.tip.style.left = Math.round(left) + "px"; ui.tip.style.top = Math.round(top) + "px";
+        }
         function preview(v, f, fps) {                                // hidden second <video>, latest request wins
             const src = v.currentSrc || v.src;
             if (!prevV || prevV.dataset.src !== src) {
@@ -2617,11 +2741,13 @@
                 prevV.muted = true; prevV.preload = "auto"; prevV.playsInline = true; prevV.dataset.src = src;
                 prevV.addEventListener("seeked", () => {
                     prevBusy = false; prevShown = prevV.dataset.want;
-                    if (ui && prevV.videoWidth) {
-                        const h = Math.round(TIP_W * prevV.videoHeight / prevV.videoWidth);
-                        if (ui.cv.height !== h) ui.cv.height = Math.min(240, Math.max(40, h));
+                    if (ui && prevV.videoWidth && prevV.videoHeight) {
+                        const d = tipSize(prevV.videoWidth, prevV.videoHeight);
+                        if (ui.cv.width !== d.w) ui.cv.width = d.w;
+                        if (ui.cv.height !== d.h) ui.cv.height = d.h;
                         ui.cv.getContext("2d").drawImage(prevV, 0, 0, ui.cv.width, ui.cv.height);
-                        ui.cv.dataset.frame = prevShown;
+                        ui.cv.dataset.frame = prevShown; ui.cv.dataset.src = prevV.dataset.src;
+                        if (cur) place();
                     }
                     if (prevWant !== null && String(prevWant.f) !== prevShown) { const w = prevWant; prevWant = null; preview(w.v, w.f, w.fps); }
                 });
@@ -2684,11 +2810,9 @@
             ui.label.textContent = `${fmt(f / fps)} · ${i18n("frame", "fotograma")} ${f} / ${last}`;
             if (drag && drag.fine) { const s = document.createElement("span"); s.className = "vs-fine"; s.textContent = i18n(" · fine", " · fino"); ui.label.appendChild(s); }
             ui.tip.dataset.frame = f;
-            ui.tip.style.display = "";
-            const tw = ui.cv.width + 8;                                 // inside the picture bounds
-            ui.tip.style.left = Math.max(z.L + 4, Math.min(z.R - tw - 4, x - tw / 2)) + "px";
-            ui.tip.style.top = (z.T - ui.cv.height - 30) + "px";
+            ui.tip.style.display = ""; tipX = x;
             if (f !== lastF) { lastF = f; preview(v, f, fps); }
+            place();
             return { f, fps };
         }
         // fine scrub (YouTube-like): while dragging, hold Shift or move the pointer more than FINE_PX above /
@@ -2746,7 +2870,10 @@
             if (e.clientX >= z.L && e.clientX <= z.R && e.clientY >= z.T && e.clientY <= z.B) { show(v); ui.root.classList.remove("vs-idle"); hover(v, e.clientX); }
             else { show(v); idle(); }
         }, { passive: true });
-        document.addEventListener("fullscreenchange", () => { drag = null; hide(); });
+        // 1.4.21: geometry changes (fullscreen in / out, window resize) -> drop everything, rebuilt on the next move
+        const reset = () => { drag = null; if (ui) { ui.root.classList.remove("vs-drag"); ui.tickKey = ""; } hide(); };
+        document.addEventListener("fullscreenchange", reset);
+        window.addEventListener("resize", reset);
         window.addEventListener("blur", () => { if (!drag) hide(); });
         setInterval(() => { if (cur && ui && !drag) { if (!usable(cur)) hide(); else played(cur); } }, 200);
         // the native timeline is hidden only on videos that get our bar, and only while the setting is on
@@ -3219,5 +3346,7 @@
         return { shown: () => shown, text: v => text(v), show, hide };
     })(core);
 
+    V.embedded = !!window.__VIDOSSER_HTTP_BRIDGE;
+    try { window.dispatchEvent(new CustomEvent("vidosser:ready", { detail: V })); } catch (_) {}   // 1.4.24: for host pages
     console.log(`[Vidosser] v${VERSION} loaded - modules: ${Object.keys(V.modules).filter(k => V.modules[k]).join(", ")}`);
 })();

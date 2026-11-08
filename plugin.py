@@ -47,7 +47,32 @@ import gradio as gr
 
 from shared.utils.plugins import WAN2GPPlugin
 
-PLUGIN_VERSION = "1.4.20"
+
+def media_hooks():
+    """1.4.25: process-wide registry other plugins use to vouch for their media (no import between plugins).
+    A provider is a dict: {"name": str, "owns": fn(real_path) -> bool,
+                           "save_frame": fn(source_path, data_bytes, file_name) -> {"ok", "path", "name", "message"}}.
+    Vidosser reads videos a provider owns (read-only) and hands frames of them to its save_frame."""
+    import sys
+    import types
+    m = sys.modules.get("wan2gp_media_hooks")
+    if m is None:
+        m = types.ModuleType("wan2gp_media_hooks")
+        m.video_sources = []
+        sys.modules["wan2gp_media_hooks"] = m
+    return m
+
+
+def media_owner(real):
+    for prov in list(getattr(media_hooks(), "video_sources", [])):
+        try:
+            if prov.get("owns") and prov["owns"](real):
+                return prov
+        except Exception as e:
+            print(f"[Vidosser] media provider {prov.get('name')} failed: {e}")
+    return None
+
+PLUGIN_VERSION = "1.4.25"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".ogv"}
@@ -185,6 +210,7 @@ _TEXT = {
     "zoom_drag": ("Drag while zoomed", "Arrastrar con zoom"),
     "zoom_edge_speed": ("Edge pan speed (px/s)", "Velocidad del desplazamiento (px/s)"),
     "zoom_edge_pan": ("Pan when the pointer nears the edge", "Mover el encuadre al acercar el ratón al borde"),
+    "zoom_drag_vpan": ("With «Step frames»: dragging up / down moves the picture", "Con «Pasar fotogramas»: arrastrar arriba / abajo mueve el encuadre"),
     "ch_zoom_pan": ("Move the picture", "Mover la imagen"),
     "ch_zoom_scrub": ("Step frames", "Pasar fotogramas"),
     "ch_wheel_zoom": ("Zoom", "Zoom"),
@@ -201,6 +227,8 @@ _TEXT = {
                         "(volume drag on the same button). Moving the picture wins: no volume drag while zoomed.",
                         "Arrastrar con el botón {btn} con zoom hace dos cosas: mover la imagen («Arrastrar con zoom: Mover la imagen») y cambiar el volumen "
                         "(arrastre de volumen en el mismo botón). Gana mover la imagen: sin volumen por arrastre mientras hay zoom."),
+    "ov_same_btn_vpan": ("While zoomed, a vertical drag with the {btn} button moves the picture («With «Step frames»: dragging up / down moves the picture») instead of changing the volume (same button as «Drag button»). Not zoomed: volume as usual.",
+                         "Con zoom, arrastrar en vertical con el botón {btn} mueve el encuadre («Con «Pasar fotogramas»: arrastrar arriba / abajo mueve el encuadre») en vez de cambiar el volumen (mismo botón que «Botón para arrastrar»). Sin zoom: volumen como siempre."),
     "ov_ctrl_jump_zoom": ("While zoomed, Ctrl + drag swaps «Drag while zoomed» (picture / frames) instead of scrubbing in short jumps («Wheel modifier: Ctrl»). The swap wins (only while zoomed).",
                           "Con zoom, Control + arrastrar alterna «Arrastrar con zoom» (imagen / fotogramas) en lugar de arrastrar a saltos cortos («Tecla modificadora de la rueda: Control»). Gana el cambio (solo con zoom)."),
     "ov_reverted": ("Not applied: {new}. It overlaps what is already saved. {why}",
@@ -286,6 +314,9 @@ _TEXT = {
     "err_gif_failed": ("ffmpeg failed: {error}", "ffmpeg falló: {error}"),
     "err_gif_folder": ("GIF folder must be inside the WanGP folder or its outputs: {folder}",
                        "La carpeta de GIFs debe estar dentro de la carpeta de WanGP o de sus salidas: {folder}"),
+    "dblclick_tolerance": ("Double-click movement tolerance (px)", "Tolerancia de movimiento del doble clic (px)"),
+    "dblclick_tolerance_info": ("A double-click still toggles fullscreen if the mouse moved up to this much between / during the two clicks (frames stepped by that tiny move are undone). 0 = only the browser's own double-click.",
+                                "Un doble clic sigue alternando la pantalla completa aunque el ratón se mueva hasta esto entre / durante los dos clics (los fotogramas pasados por ese micro-movimiento se deshacen). 0 = solo el doble clic del navegador."),
     "seek_preview": ("Seek bar with frame preview (hover the bottom of the video)", "Barra de avance con vista previa de fotogramas (pasa el ratón por la parte inferior del vídeo)"),
     "seek_preview_info": ("Shows the frame, time and frame number under the pointer; click or drag = frame-accurate seek. Also in fullscreen.",
                           "Muestra el fotograma, el tiempo y el número de fotograma bajo el puntero; clic o arrastrar = ir al fotograma exacto. También a pantalla completa."),
@@ -366,6 +397,7 @@ DEFAULT_SETTINGS = {
         "show_overlay": True,       # small info badge on the video (not possible in native <video> fullscreen)
         "overlay_ms": 1200,         # how long the badge stays visible (ms)
         "container_fullscreen": True,
+        "dblclick_tolerance": 10,   # 1.4.23: px of mouse movement a double-click may have (0-30; 0 = native dblclick only)
         "hide_controls": "fullscreen",  # hide the video control bars: "off" | "fullscreen" | "always"
         "show_thin_progress": True,
         "seek_preview": True,       # 1.4.19: Vidosser seek bar (bottom of the video): frame preview on hover, frame-accurate click / drag     # thin 3 px progress line at the bottom edge while controls are hidden  # video fullscreen (double-click / player button) on its container
@@ -397,6 +429,7 @@ DEFAULT_SETTINGS = {
         "wheel_jump_modifier": "ctrl",  # modifier + wheel key: "ctrl" | "alt" | "shift" | "meta" | "none"
         "zoom_edge_speed": 1400,    # edge pan speed at full depth, px/s (200-4000)
         "zoom_edge_pan": False,     # zoomed: the picture scrolls while the pointer is near an edge of the video
+        "zoom_drag_vpan": True,     # zoomed + zoom_drag "scrub": a mostly vertical scrub-button drag pans the picture up / down (1.4.22)
         "zoom_drag": "pan",         # while zoomed, a scrub-button drag: "pan" (move the picture) | "scrub" (frames, zoom kept)
         "wheel_action": "frames",   # plain wheel: "frames" (step) | "zoom" (zoom at the cursor, drag pans while zoomed)
         "wheel_mod_action": "jump", # what modifier + wheel does: "jump" (short jump) | "speed" (±0.25 playbackRate, 0.25..2)
@@ -527,7 +560,7 @@ def _coerce(section, key, default, value):
             return "" if (section, key) in _ALLOW_EMPTY else default
         return value.lower() if section == "keys" else value
     if isinstance(default, (int, float)):
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and (value > 0 or (section, key) == ("gif", "fps") and value == 0)
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and (value > 0 or (section, key) in (("gif", "fps"), ("general", "dblclick_tolerance")) and value == 0)
         if not ok:
             return default
         return int(round(value)) if isinstance(default, int) else float(value)
@@ -549,6 +582,9 @@ _OVERLAPS = (
                                   and s["frame_step"]["zoom_drag"] == "pan",
      (("volume", "drag_button"), ("frame_step", "drag_button"), ("volume", "drag_require_ctrl"), ("frame_step", "wheel_action"),
       ("frame_step", "zoom_drag"), ("volume", "drag_volume"), ("frame_step", "drag_scrub")), True),
+    ("ov_same_btn_vpan", lambda s: _ov_same(s) and not s["volume"]["drag_require_ctrl"] and s["frame_step"]["wheel_action"] == "zoom"
+                                   and s["frame_step"]["zoom_drag"] == "scrub" and s["frame_step"].get("zoom_drag_vpan", True) is not False,
+     (("frame_step", "zoom_drag_vpan"),), False),
     ("ov_ctrl_jump_zoom", lambda s: s["frame_step"]["wheel_action"] == "zoom" and s["frame_step"]["wheel_jump_modifier"] == "ctrl"
                                     and bool(s["frame_step"]["drag_scrub"]),
      (("frame_step", "wheel_action"), ("frame_step", "wheel_jump_modifier")), False),
@@ -585,6 +621,11 @@ def resolve_overlaps(new, old, lang="en"):
     return notes
 
 
+def _dbl_tol(x):
+    try: return int(min(30, max(0, round(float(x)))))
+    except (TypeError, ValueError): return 10
+
+
 def _edge_speed(x):
     try: return int(min(4000, max(200, round(float(x)))))
     except (TypeError, ValueError): return 1400
@@ -616,6 +657,7 @@ def load_settings(path=None):
     settings["save_frame"]["sound_volume"] = max(1, min(100, settings["save_frame"]["sound_volume"]))
     settings["save_frame"]["toast_ms"] = max(500, min(30000, settings["save_frame"]["toast_ms"]))
     settings["frame_step"]["drag_pixels_per_frame"] = max(1, min(200, settings["frame_step"]["drag_pixels_per_frame"]))
+    settings["general"]["dblclick_tolerance"] = _dbl_tol(settings["general"].get("dblclick_tolerance", 10))
     settings["frame_step"]["zoom_edge_speed"] = _edge_speed(settings["frame_step"].get("zoom_edge_speed", 1400))
     settings["gif"]["fps"] = max(0, min(60, settings["gif"]["fps"]))
     settings["gif"]["colors"] = max(16, min(256, settings["gif"]["colors"]))
@@ -690,9 +732,9 @@ def validate_keys(keys, lang="en"):
     return normalized, errors
 
 
-def build_js(settings=None):
+def build_js(settings=None, quiet=False):
     settings = settings or load_settings()
-    for msg in overlap_messages(settings, "en"):                 # 1.4.13: overlapping mouse + modifier combinations
+    for msg in ([] if quiet else overlap_messages(settings, "en")):                 # 1.4.13: overlapping mouse + modifier combinations
         print(f"[Vidosser] ⚠️ {msg}")
     with open(os.path.join(_PLUGIN_DIR, "vidosser.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
@@ -721,6 +763,12 @@ class VidosserPlugin(WAN2GPPlugin):
     def setup_ui(self):
         self.request_global("server_config")
         self.add_custom_js(build_js())
+        try:   # 1.4.24: the same script + bridge for other pages (e.g. the Reference Library Galería)
+            from . import embed_routes
+            embed_routes.set_plugin(self)
+            embed_routes.install()
+        except Exception as e:
+            print(f"[Vidosser] embed routes not installed: {e}")
         self.add_tab(tab_id="vidosser", label="Vidosser", component_constructor=self.create_ui)
 
     # ------------------------------------------------------------- folders
@@ -852,6 +900,8 @@ class VidosserPlugin(WAN2GPPlugin):
                                    label="wheel_action", info="wheel_action_info", choices=("choices", "wheel_action"))
                 zoom_drag = loc(gr.Dropdown(label=T("zoom_drag"), choices=C("zoom_drag"), value=current("frame_step", "zoom_drag"),
                                             elem_id="vidosser_zoom_drag"), label="zoom_drag", choices=("choices", "zoom_drag"))
+                zoom_drag_vpan = loc(gr.Checkbox(label=T("zoom_drag_vpan"), value=current("frame_step", "zoom_drag_vpan"),
+                                                 elem_id="vidosser_zoom_drag_vpan"), label="zoom_drag_vpan")
                 zoom_edge_pan = loc(gr.Checkbox(label=T("zoom_edge_pan"), value=current("frame_step", "zoom_edge_pan"),
                                                 elem_id="vidosser_zoom_edge_pan"), label="zoom_edge_pan")
                 zoom_edge_speed = loc(gr.Slider(label=T("zoom_edge_speed"), minimum=200, maximum=4000, step=100,
@@ -920,6 +970,8 @@ class VidosserPlugin(WAN2GPPlugin):
                 show_overlay = loc(gr.Checkbox(label=T("show_overlay"), value=current("general", "show_overlay"), elem_id="vidosser_show_overlay"), label="show_overlay")
                 container_fs = loc(gr.Checkbox(label=T("container_fs"), value=current("general", "container_fullscreen"), elem_id="vidosser_container_fullscreen",
                                                info=T("container_fs_info")), label="container_fs", info="container_fs_info")
+                dblclick_tol = loc(gr.Slider(label=T("dblclick_tolerance"), minimum=0, maximum=30, step=1, value=current("general", "dblclick_tolerance"),
+                                             elem_id="vidosser_dblclick_tolerance", info=T("dblclick_tolerance_info")), label="dblclick_tolerance", info="dblclick_tolerance_info")
                 hide_controls = loc(gr.Dropdown(label=T("hide_controls"), choices=C("hide_controls"), value=current("general", "hide_controls"),
                                                 elem_id="vidosser_hide_controls", info=T("hide_controls_info")),
                                     label="hide_controls", info="hide_controls_info", choices=("choices", "hide_controls"))
@@ -942,7 +994,7 @@ class VidosserPlugin(WAN2GPPlugin):
         inputs = key_boxes + [keys_enabled, wheel_enabled, invert, shift_frames, jump_mode, jump_seconds, jump_frames,
                               sf_format, jpg_quality, sf_mode, folder, show_overlay, default_fps, middle_click, wheel_fs_only, jump_modifier,
                               toast, toast_s, flash, sound, sound_volume, container_fs, loop_all, drag_scrub, drag_ppf, drag_invert, drag_button, drag_hide_cursor, drag_pointer_lock, hide_controls, thin_progress,
-                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed, gif_scale, gif_fps, gif_colors, gif_dither, gif_folder, seek_preview]
+                              drag_volume, volume_ppp, volume_invert, volume_remember, no_autojump, jump_on_exit, new_notify, wrap, wheel_mod_action, speed_remember, loop_mode, volume_button, volume_ctrl, wheel_action, zoom_drag, zoom_edge_pan, zoom_edge_speed, zoom_drag_vpan, gif_scale, gif_fps, gif_colors, gif_dither, gif_folder, seek_preview, dblclick_tol]
         save_btn.click(fn=self._save_from_ui, inputs=inputs + [lang_box], outputs=[status, settings_json], show_progress="hidden",
                        js=_page_lang_js(len(inputs) + 1)).then(
             fn=None, inputs=[settings_json], outputs=None, js="(s) => { if (window.vidosser) window.vidosser.applySettings(s); }")
@@ -977,7 +1029,7 @@ class VidosserPlugin(WAN2GPPlugin):
                   "sf_format", "jpg_quality", "sf_mode", "folder", "show_overlay", "default_fps", "middle_click", "wheel_fs_only",
                   "jump_modifier", "toast", "toast_s", "flash", "sound", "sound_volume", "container_fs", "loop_all", "drag_scrub", "drag_ppf", "drag_invert", "drag_button", "drag_hide_cursor", "drag_pointer_lock", "hide_controls", "thin_progress",
                   "drag_volume", "volume_ppp", "volume_invert", "volume_remember", "no_autojump", "jump_on_exit", "new_notify", "wrap",
-                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed", "gif_scale", "gif_fps", "gif_colors", "gif_dither", "gif_folder", "seek_preview")
+                  "wheel_mod_action", "speed_remember", "loop_mode", "volume_button", "volume_ctrl", "wheel_action", "zoom_drag", "zoom_edge_pan", "zoom_edge_speed", "zoom_drag_vpan", "gif_scale", "gif_fps", "gif_colors", "gif_dither", "gif_folder", "seek_preview", "dblclick_tolerance")
 
     def _save_from_ui(self, *values):
         """Inputs: one key box per KEY_ACTIONS entry, the fields of _UI_FIELDS (same order as `inputs`), then the language."""
@@ -996,8 +1048,8 @@ class VidosserPlugin(WAN2GPPlugin):
                          hide_controls="fullscreen", thin_progress=True,
                          drag_volume=True, volume_ppp=2.0, volume_invert=False, volume_remember=True,
                          no_autojump=True, jump_on_exit=True, new_notify=True, wrap=True,
-                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", zoom_edge_pan=False, zoom_edge_speed=1400,
-                         gif_scale="original", gif_fps=0, gif_colors=256, gif_dither="sierra", gif_folder="", seek_preview=True, lang="en"):
+                         wheel_mod_action="jump", speed_remember=True, loop_mode="normal", volume_button="left", volume_ctrl=False, wheel_action="frames", zoom_drag="pan", zoom_edge_pan=False, zoom_edge_speed=1400, zoom_drag_vpan=True,
+                         gif_scale="original", gif_fps=0, gif_colors=256, gif_dither="sierra", gif_folder="", seek_preview=True, dblclick_tolerance=10, lang="en"):
         lang = norm_lang(lang)
         settings = load_settings()
         keys, errors = validate_keys(key_values, lang)
@@ -1069,7 +1121,7 @@ class VidosserPlugin(WAN2GPPlugin):
         settings["frame_step"].update(wheel_jump_modifier=jump_modifier, drag_scrub=bool(drag_scrub), drag_pixels_per_frame=drag_ppf,
                                       drag_invert=bool(drag_invert), drag_button=drag_button,
                                       drag_hide_cursor=bool(drag_hide_cursor), drag_pointer_lock=bool(drag_pointer_lock), wrap=bool(wrap),
-                                      wheel_mod_action=wheel_mod_action, wheel_action=wheel_action, zoom_drag=zoom_drag, zoom_edge_pan=bool(zoom_edge_pan), zoom_edge_speed=_edge_speed(zoom_edge_speed), speed_remember=bool(speed_remember))
+                                      wheel_mod_action=wheel_mod_action, wheel_action=wheel_action, zoom_drag=zoom_drag, zoom_edge_pan=bool(zoom_edge_pan), zoom_edge_speed=_edge_speed(zoom_edge_speed), zoom_drag_vpan=bool(zoom_drag_vpan), speed_remember=bool(speed_remember))
         settings["frame_step"].update(wheel_enabled=bool(wheel_enabled), wheel_fullscreen_only=bool(wheel_fs_only), invert_direction=bool(invert), shift_frames=shift_frames,
                                       jump_mode=jump_mode if jump_mode in ("seconds", "frames") else "seconds",
                                       jump_seconds=jump_seconds, jump_frames=jump_frames)
@@ -1078,7 +1130,7 @@ class VidosserPlugin(WAN2GPPlugin):
                                       middle_click_save=bool(middle_click), toast=bool(toast), toast_ms=int(round(toast_s * 1000)),
                                       flash=bool(flash), sound=bool(sound), sound_volume=sound_volume)
         settings["general"].update(show_overlay=bool(show_overlay), default_fps=default_fps, container_fullscreen=bool(container_fs),
-                                   hide_controls=hide_controls, show_thin_progress=bool(thin_progress), seek_preview=bool(seek_preview))
+                                   hide_controls=hide_controls, show_thin_progress=bool(thin_progress), seek_preview=bool(seek_preview), dblclick_tolerance=_dbl_tol(dblclick_tolerance))
         settings["loop"].update(loop_all=bool(loop_all), mode=loop_mode)
         settings["volume"].update(drag_volume=bool(drag_volume), drag_pixels_per_percent=float(volume_ppp), drag_invert=bool(volume_invert),
                                   drag_button=volume_button, drag_require_ctrl=bool(volume_ctrl), remember=bool(volume_remember))
@@ -1144,6 +1196,8 @@ class VidosserPlugin(WAN2GPPlugin):
                     return real
             except ValueError:
                 continue
+        if media_owner(real):   # 1.4.25: e.g. a Reference Library watched folder
+            return real
         raise LocalizedError("err_outside")
 
     @staticmethod
@@ -1204,6 +1258,14 @@ class VidosserPlugin(WAN2GPPlugin):
         data, mime = self.encode_image(image, fmt, settings["jpg_quality"])
         base = f"{Path(source).stem}_frame{int(frame_no):05d}"
         result = {"ok": True, "frame": int(frame_no), "width": image.width, "height": image.height, "name": f"{base}.{ext}", "source": source}
+        owner = media_owner(source)
+        if owner and owner.get("save_frame") and req.get("to_library", True):   # 1.4.25: the owner's library keeps it
+            lib = owner["save_frame"](source, data, f"{base}.{ext}") or {}
+            if not lib.get("ok"):
+                return {"ok": False, "error": lib.get("error") or "library"}
+            result.update(path=lib.get("path") or lib.get("name"), name=lib.get("name") or result["name"],
+                          library=owner.get("name"), message=lib.get("message"), hash=lib.get("hash"))
+            return result
         if req.get("mode") == "direct":
             ok, folder, message = self.check_folder(settings["folder"], create=True, lang=lang)
             if not ok:

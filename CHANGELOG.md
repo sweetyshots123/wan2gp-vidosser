@@ -2,6 +2,35 @@
 
 All notable changes to Vidosser. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.4.25 — 2026-10-31
+
+### Fixed
+- Saving a frame (or a GIF) from a video that lives in another plugin's library (e.g. a Reference Library watched
+  folder outside WanGP's folders) no longer fails with "video outside WanGP's folders". Plugins vouch for their own
+  files through a small process-wide registry (`wan2gp_media_hooks.video_sources`); paths are still checked with
+  realpath and only files a provider owns are accepted (read-only).
+- Frames of such videos are saved into that library (the Reference Library adds them to its media, like an import),
+  so they show up in both the WanGP tab and the Galería; the page gets a `vidosser:frame-saved` event.
+
+ — 2026-10-31
+
+- **New: Vidosser on other pages (embeddable, single source).** `GET /vidosser/vidosser.js` serves the very script WanGP injects (`vidosser.js` + `settings.json`, rebuilt from the plugin folder on every request), so any page served by WanGP gets every Vidosser feature with `<script src="/vidosser/vidosser.js"></script>`, and code or settings changes apply there on reload. Frame saving / GIF export go through `POST /vidosser/bridge` (the same handler as the Vidosser tab). `GET /vidosser/info` returns version and settings. A `vidosser:ready` window event fires when the script is up; `window.vidosser.embedded` is true on such pages. Routes sit behind WanGP's login check. Used by the Reference Library Galería. **Restart WanGP once to add the routes.** Nothing changes inside WanGP itself.
+
+## [1.4.23] - 2026-10-22
+### Fixed
+- Double-click to fullscreen failed when the mouse moved a few px between or during the two clicks: Windows resets the click count (no `mousedown` detail 2 / `dblclick`), and a move past the 4 px drag dead zone made the first click a frame_step drag, so the second press was taken as "a click after a scrub". The double-click is now also detected at the pointer level: left button, 2nd press within 400 ms of the 1st release, the 1st press moved at most `general.dblclick_tolerance` px and the 2nd press lands within that distance of the 1st -> Vidosser's fullscreen toggles (enter and exit) on the 2nd press; the native mousedown / dblclick of the same gesture are swallowed (no double toggle). A frame stepped by the tiny move is undone (a paused video returns to the exact time from before the 1st press), the play state is kept and the completing click never toggles play. The drag is unchanged (same dead zone; a 30 px drag scrubs as before).
+### Added
+- `general.dblclick_tolerance` (0–30 px, default 10; «Tolerancia de movimiento del doble clic (px)» / "Double-click movement tolerance (px)"); 0 = only the browser's own double-click. Missing in old settings -> 10.
+
+## [1.4.22] - 2026-10-20
+### Added
+- `frame_step.zoom_drag_vpan` (default on; «Con «Pasar fotogramas»: arrastrar arriba / abajo mueve el encuadre» / "With «Step frames»: dragging up / down moves the picture"): zoomed (> 1×) with `zoom_drag` = `scrub`, a scrub-button drag locks its axis after 8 px - mostly horizontal steps frames as before, mostly vertical moves the picture up / down following the pointer (vertical only, clamped to the image edges; free pan stays on Ctrl + drag). Pointer Lock is never taken for it (it is only requested for a horizontal scrub; under a lock the movementY sums would be used). If the volume drag uses the same button without «Mantener Control», the zoomed vertical drag pans instead of changing the volume (reported by the overlap check as a note, not refused). Unchanged: Ctrl swap, `zoom_drag` = `pan`, not zoomed, volume with Ctrl or on the other button.
+
+## [1.4.21] - 2026-10-20
+### Fixed
+- Seek-bar preview in container fullscreen of a video player (`vidosser-fs-container`): the fullscreen layout rule (children stretched to 100 % width, flex-centred) also hit Vidosser's own overlays, so the preview became a huge dark translucent band (almost the full screen width, at the bottom or around the middle with portrait videos) with the thumbnail at its right and the time label beside it or off-screen. The label is again under the thumbnail inside a small box just above the bar. The rule now skips Vidosser's elements (`vidosser-*`).
+- Preview size from the video's aspect ratio within 192 × 160 (portrait videos were squashed to 192 × 240); position clamped inside the displayed picture and the screen; hidden until a frame of the current video is drawn (never an empty or stale-size box); dropped on fullscreen change / window resize and rebuilt on the next pointer move.
+
 ## [1.4.20] - 2026-10-19
 ### Fixed
 - Seek bar: in fullscreen with a picture narrower than the screen it spanned the whole container width while the thin progress line spanned the picture -> two stacked bars, preview at the far edge. The bar now spans the displayed picture (object-fit: contain rect; the whole box while zoomed) at its bottom, the thin progress line and the A-B loop line are hidden while it is shown (the A-B segment is drawn on it), and the preview is kept inside the picture. Hover time / frame = pointer position over the picture-wide bar (no inset).
